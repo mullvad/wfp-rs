@@ -1,10 +1,11 @@
 [package]
 name = "wfp"
 version = "0.0.7"
+authors = ["Mullvad VPN"]
 edition = "2024"
 description = "A Rust library for the Windows Filtering Platform (WFP) API"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/dlon/wfp-rs"
+repository = "https://github.com/mullvad/wfp-rs"
 documentation = "https://docs.rs/wfp"
 keywords = ["windows", "firewall", "network", "security"]
 categories = ["os::windows-apis", "network-programming"]
