@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
-    FWPM_SUBLAYER0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
+    FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
 };
 use windows_sys::core::GUID;
 
@@ -166,6 +166,21 @@ impl<Name> SubLayerBuilder<Name> {
         // SAFETY: The data is never mutated; the Arc keeps the GUID alive as long as `self` lives.
         self.sublayer.providerKey = Arc::as_ptr(&key) as *mut _;
         self.provider_key = Some(key);
+        self
+    }
+
+    /// Marks the sublayer as persistent.
+    ///
+    /// Persistent sublayers survive a Base Filtering Engine restart. Persistent
+    /// state survives reboots and must be cleaned up explicitly with
+    /// [`delete_sublayer`].
+    ///
+    /// This sets the `FWPM_SUBLAYER_FLAG_PERSISTENT` bit in the `flags` field
+    /// of the underlying [`FWPM_SUBLAYER0`] structure.
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
+    pub fn persistent(mut self) -> SubLayerBuilder<Name> {
+        self.sublayer.flags |= FWPM_SUBLAYER_FLAG_PERSISTENT;
         self
     }
 }
