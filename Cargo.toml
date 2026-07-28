@@ -16,7 +16,7 @@ wfp-integration-tests = []
 
 [dependencies]
 log = "0.4.27"
-windows-sys = { version = "0.60.2", features = ["Win32", "Win32_NetworkManagement", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_NetworkManagement_WindowsFilteringPlatform", "Win32_Security", "Win32_System_Rpc"] }
+windows-sys = { version = "0.61", features = ["Win32", "Win32_NetworkManagement", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_NetworkManagement_WindowsFilteringPlatform", "Win32_Security", "Win32_System_Rpc"] }
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"
