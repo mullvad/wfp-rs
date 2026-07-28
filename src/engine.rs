@@ -5,6 +5,7 @@ use std::mem;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::RawHandle;
 use std::ptr;
+use std::time::Duration;
 
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::STATUS_SUCCESS;
@@ -99,6 +100,24 @@ impl FilterEngineBuilder {
     /// [`FWPM_SESSION_FLAG_DYNAMIC`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_session0
     pub fn dynamic(mut self) -> Self {
         self.session.flags |= FWPM_SESSION_FLAG_DYNAMIC;
+        self
+    }
+
+    /// Sets how long a call to [`Transaction::new`] waits for the transaction
+    /// lock before failing with `FWP_E_TIMEOUT`.
+    ///
+    /// [`Duration::ZERO`] lets the Base Filtering Engine pick its own default
+    /// timeout, which is also what happens if this is never called. Durations
+    /// are truncated to whole milliseconds, and anything longer than
+    /// `u32::MAX` milliseconds (roughly 49 days) is clamped to that.
+    ///
+    /// This sets the `txnWaitTimeoutInMSec` field in the underlying
+    /// [`FWPM_SESSION0`] structure.
+    ///
+    /// [`Transaction::new`]: crate::Transaction::new
+    /// [`FWPM_SESSION0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_session0
+    pub fn transaction_timeout(mut self, timeout: Duration) -> Self {
+        self.session.txnWaitTimeoutInMSec = timeout.as_millis().try_into().unwrap_or(u32::MAX);
         self
     }
 }
