@@ -7,8 +7,9 @@ use std::ptr;
 use std::sync::Arc;
 
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
-use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::FWPM_SUBLAYER0;
-use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::FwpmSubLayerAdd0;
+use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
+    FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
+};
 use windows_sys::core::GUID;
 
 use crate::transaction::Transaction;
@@ -167,6 +168,21 @@ impl<Name> SubLayerBuilder<Name> {
         self.provider_key = Some(key);
         self
     }
+
+    /// Marks the sublayer as persistent.
+    ///
+    /// Persistent sublayers survive a Base Filtering Engine restart. Persistent
+    /// state survives reboots and must be cleaned up explicitly with
+    /// [`delete_sublayer`].
+    ///
+    /// This sets the `FWPM_SUBLAYER_FLAG_PERSISTENT` bit in the `flags` field
+    /// of the underlying [`FWPM_SUBLAYER0`] structure.
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
+    pub fn persistent(mut self) -> SubLayerBuilder<Name> {
+        self.sublayer.flags |= FWPM_SUBLAYER_FLAG_PERSISTENT;
+        self
+    }
 }
 
 impl SubLayerBuilder<SubLayerBuilderHasName> {
@@ -198,4 +214,24 @@ impl SubLayerBuilder<SubLayerBuilderHasName> {
 
         Ok(())
     }
+}
+
+/// Delete a sublayer by its GUID.
+///
+/// The GUID corresponds to the `subLayerKey` field in the underlying
+/// [`FWPM_SUBLAYER0`] structure.
+///
+/// This calls [`FwpmSubLayerDeleteByKey0`]. It returns
+/// `FWP_E_IN_USE` (surfaced as an [`io::Error`]) if any filter is still in the
+/// sublayer; remove those first.
+///
+/// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
+/// [`FwpmSubLayerDeleteByKey0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmsublayerdeletebykey0
+pub fn delete_sublayer<'a>(transaction: &Transaction<'a>, guid: &GUID) -> io::Result<()> {
+    // SAFETY: The handle and GUID are valid
+    let status = unsafe { FwpmSubLayerDeleteByKey0(transaction.engine.as_raw_handle(), guid) };
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+    Ok(())
 }
