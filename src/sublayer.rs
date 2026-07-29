@@ -10,8 +10,8 @@ use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
 };
-use windows_sys::core::GUID;
 
+use crate::GUID;
 use crate::transaction::Transaction;
 use crate::util::string_to_null_terminated_utf16;
 

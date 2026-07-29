@@ -3,8 +3,6 @@
 use std::ffi::OsStr;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use windows_sys::core::GUID;
-
 // Import the library modules we want to test
 use wfp::*;
 
@@ -203,7 +201,7 @@ fn test_app_id_condition() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = windows_sys::core::GUID::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
+    let test_guid = GUID::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
 
     SubLayerBuilder::default()
         .name("Test AppId Sublayer")

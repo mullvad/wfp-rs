@@ -18,8 +18,7 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
 };
 
-use windows_sys::core::GUID;
-
+use crate::GUID;
 use crate::blob::{OwnedByteBlob, app_id_from_filename};
 use crate::util::string_to_null_terminated_utf16;
 

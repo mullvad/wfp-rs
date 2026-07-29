@@ -1,7 +1,7 @@
 //! Enumeration over WFP objects.
 
-use crate::Transaction;
 use crate::util::null_terminated_utf16_to_os_string;
+use crate::{GUID, Transaction};
 
 use std::ffi::OsString;
 use std::io;
@@ -14,7 +14,6 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FwpmFilterDestroyEnumHandle0, FwpmFilterEnum0, FwpmFreeMemory0, FwpmSubLayerCreateEnumHandle0,
     FwpmSubLayerDestroyEnumHandle0, FwpmSubLayerEnum0,
 };
-use windows_sys::core::GUID;
 
 mod private {
     use super::*;

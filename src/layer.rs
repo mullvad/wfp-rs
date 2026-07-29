@@ -1,6 +1,7 @@
 //! Layers
 
-use windows_sys::{Win32::NetworkManagement::WindowsFilteringPlatform::*, core::GUID};
+use crate::GUID;
+use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::*;
 
 /// Specifies the network layer at which a filter operates.
 ///
