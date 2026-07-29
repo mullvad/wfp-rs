@@ -1,11 +1,20 @@
 //! Integration tests for the Windows Filtering Platform library.
 
+use std::ffi::OsStr;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use windows_sys::core::GUID;
 
 // Import the library modules we want to test
 use wfp::*;
+
+/// `GUID` does not implement `PartialEq`.
+fn guid_eq(left: &GUID, right: &GUID) -> bool {
+    left.data1 == right.data1
+        && left.data2 == right.data2
+        && left.data3 == right.data3
+        && left.data4 == right.data4
+}
 
 #[test]
 #[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
@@ -61,6 +70,81 @@ fn test_add_filters_and_sublayer() {
     transaction
         .commit()
         .expect("Should be able to commit multiple filters");
+}
+
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_enumerate_sublayers() {
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    let test_provider_guid = GUID::from_u128(0x0e0e0e0e_1111_2222_3333_444455556666);
+    let test_guid = GUID::from_u128(0x0e0e0e0e_1234_5678_9abc_def012345678);
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    ProviderBuilder::default()
+        .name("Test Enumeration Provider")
+        .description("Provider for sublayer enumeration tests")
+        .guid(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add provider");
+
+    SubLayerBuilder::default()
+        .name("Test Enumeration Sublayer")
+        .description("Test sublayer for enumeration integration tests")
+        .weight(100)
+        .guid(test_guid)
+        .provider(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add sublayer");
+
+    transaction
+        .commit()
+        .expect("Should be able to commit sublayer transaction");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    let mut sublayer_enum =
+        SubLayerEnumerator::new(&transaction).expect("Should be able to enumerate sublayers");
+
+    let mut found = false;
+
+    while let Some(sublayer) = sublayer_enum.next() {
+        let sublayer = sublayer.expect("Should be able to read sublayer");
+        if !guid_eq(&sublayer.guid(), &test_guid) {
+            continue;
+        }
+
+        assert_eq!(
+            sublayer.name().as_deref(),
+            Some(OsStr::new("Test Enumeration Sublayer"))
+        );
+        assert_eq!(
+            sublayer.description().as_deref(),
+            Some(OsStr::new(
+                "Test sublayer for enumeration integration tests"
+            ))
+        );
+        assert_eq!(sublayer.weight(), 100);
+        assert!(
+            sublayer
+                .provider()
+                .is_some_and(|guid| guid_eq(&guid, &test_provider_guid)),
+            "The sublayer should be attached to the test provider"
+        );
+        assert!(
+            !sublayer.persistent(),
+            "The sublayer was added to a dynamic session"
+        );
+
+        found = true;
+        break;
+    }
+
+    assert!(found, "Should find the sublayer that was just added");
 }
 
 #[test]
