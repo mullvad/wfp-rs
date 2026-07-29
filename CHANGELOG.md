@@ -20,10 +20,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   the transaction lock before failing with `FWP_E_TIMEOUT`.
 - Add `SubLayerBuilder::persistent`, for creating sublayers that persist across reboots.
 - Add `delete_sublayer`, for deleting a sublayer by its GUID.
+- Add `SubLayerEnumerator`, for enumerating the sublayers registered with the filter engine. Each
+  `SubLayerEnumItem` exposes the sublayer's GUID, provider, name, description and weight, and
+  whether it is persistent.
 
 ### Changed
 - **Breaking**: Update `windows-sys` to 0.61. `GUID` is part of the public API, so dependents have
   to use the same `windows-sys` version.
+- **Breaking**: `FilterEnumItem::name` and `FilterEnumItem::description` return `Option<OsString>`
+  instead of `io::Result<Option<String>>`. Names that are not valid Unicode are preserved instead
+  of being reported as an error.
+- **Breaking**: `FilterEnumerator` and `FilterEnumItem` are aliases for the generic `Enumerator`
+  and `EnumItem`, and take fewer lifetime parameters: `FilterEnumerator<'a>` and
+  `FilterEnumItem<'a>`.
 
 
 ## [0.0.7] - 2026-05-01
