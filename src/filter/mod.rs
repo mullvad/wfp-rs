@@ -17,8 +17,8 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_FILTER_FLAG_PERSISTENT, FWPM_FILTER0, FwpmFilterAdd0, FwpmFilterDeleteById0,
     FwpmFilterDeleteByKey0,
 };
-use windows_sys::core::GUID;
 
+use crate::GUID;
 use crate::action::ActionType;
 use crate::condition::Condition;
 use crate::layer::Layer;
