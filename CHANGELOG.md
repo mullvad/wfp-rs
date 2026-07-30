@@ -30,9 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Breaking**: `FilterEnumItem::name` and `FilterEnumItem::description` return `Option<OsString>`
   instead of `io::Result<Option<String>>`. Names that are not valid Unicode are preserved instead
   of being reported as an error.
-- **Breaking**: `FilterEnumerator` and `FilterEnumItem` are aliases for the generic `Enumerator`
-  and `EnumItem`, and take fewer lifetime parameters: `FilterEnumerator<'a>` and
-  `FilterEnumItem<'a>`.
+- **Breaking**: `FilterEnumerator` and `FilterEnumItem` take only one lifetime parameter.
 
 
 ## [0.0.7] - 2026-05-01
