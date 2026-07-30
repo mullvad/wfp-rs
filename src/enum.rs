@@ -9,7 +9,7 @@ use std::os::windows::io::AsRawHandle;
 use std::ptr;
 use windows_sys::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS, HANDLE};
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
-    FWPM_DISPLAY_DATA0, FWPM_FILTER_ENUM_TEMPLATE0, FWPM_FILTER0, FWPM_SUBLAYER_ENUM_TEMPLATE0,
+    FWPM_FILTER_ENUM_TEMPLATE0, FWPM_FILTER0, FWPM_SUBLAYER_ENUM_TEMPLATE0,
     FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmFilterCreateEnumHandle0,
     FwpmFilterDestroyEnumHandle0, FwpmFilterEnum0, FwpmFreeMemory0, FwpmSubLayerCreateEnumHandle0,
     FwpmSubLayerDestroyEnumHandle0, FwpmSubLayerEnum0,
@@ -48,15 +48,6 @@ mod private {
 
         /// The `FwpmXxxDestroyEnumHandle0` function for this object type.
         const DESTROY_ENUM_HANDLE: DestroyEnumHandleFn;
-
-        /// Returns the GUID identifying `object`.
-        fn key(object: &Self::Object) -> GUID;
-
-        /// Returns the display data of `object`.
-        fn display_data(object: &Self::Object) -> &FWPM_DISPLAY_DATA0;
-
-        /// Returns the provider GUID of `object`, which may be null.
-        fn provider_key(object: &Self::Object) -> *const GUID;
     }
 }
 
@@ -76,18 +67,6 @@ impl EnumerableObject for Filter {
     const CREATE_ENUM_HANDLE: CreateEnumHandleFn<Self::Template> = FwpmFilterCreateEnumHandle0;
     const ENUM: EnumFn<Self::Object> = FwpmFilterEnum0;
     const DESTROY_ENUM_HANDLE: DestroyEnumHandleFn = FwpmFilterDestroyEnumHandle0;
-
-    fn key(object: &Self::Object) -> GUID {
-        object.filterKey
-    }
-
-    fn display_data(object: &Self::Object) -> &FWPM_DISPLAY_DATA0 {
-        &object.displayData
-    }
-
-    fn provider_key(object: &Self::Object) -> *const GUID {
-        object.providerKey
-    }
 }
 
 /// Selects sublayers ([`FWPM_SUBLAYER0`]) for enumeration. See [`SubLayerEnumerator`].
@@ -104,18 +83,6 @@ impl EnumerableObject for SubLayer {
     const CREATE_ENUM_HANDLE: CreateEnumHandleFn<Self::Template> = FwpmSubLayerCreateEnumHandle0;
     const ENUM: EnumFn<Self::Object> = FwpmSubLayerEnum0;
     const DESTROY_ENUM_HANDLE: DestroyEnumHandleFn = FwpmSubLayerDestroyEnumHandle0;
-
-    fn key(object: &Self::Object) -> GUID {
-        object.subLayerKey
-    }
-
-    fn display_data(object: &Self::Object) -> &FWPM_DISPLAY_DATA0 {
-        &object.displayData
-    }
-
-    fn provider_key(object: &Self::Object) -> *const GUID {
-        object.providerKey
-    }
 }
 
 /// An iterator over filters.
@@ -339,60 +306,6 @@ pub struct EnumItem<'a, T: EnumerableObject> {
     object: &'a T::Object,
 }
 
-impl<T: EnumerableObject> EnumItem<'_, T> {
-    /// Return the object GUID.
-    ///
-    /// This corresponds to the `filterKey` field in [`FWPM_FILTER0`], and the `subLayerKey` field
-    /// in [`FWPM_SUBLAYER0`].
-    ///
-    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn guid(&self) -> GUID {
-        T::key(self.object)
-    }
-
-    /// Return the object provider, if set.
-    ///
-    /// This corresponds to the `providerKey` field in the underlying [`FWPM_FILTER0`] or
-    /// [`FWPM_SUBLAYER0`] structure.
-    ///
-    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn provider(&self) -> Option<GUID> {
-        let provider_key = T::provider_key(self.object);
-        if provider_key.is_null() {
-            None
-        } else {
-            // SAFETY: The provider contains no pointers, and is non-null.
-            Some(unsafe { *provider_key })
-        }
-    }
-
-    /// Return the object name, if set.
-    ///
-    /// This corresponds to `displayData.name` in the underlying [`FWPM_FILTER0`] or
-    /// [`FWPM_SUBLAYER0`] structure.
-    ///
-    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn name(&self) -> Option<OsString> {
-        // SAFETY: If non-null, the string is null-terminated
-        unsafe { null_terminated_utf16_to_os_string(T::display_data(self.object).name) }
-    }
-
-    /// Return the object description, if set.
-    ///
-    /// This corresponds to `displayData.description` in the underlying [`FWPM_FILTER0`] or
-    /// [`FWPM_SUBLAYER0`] structure.
-    ///
-    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn description(&self) -> Option<OsString> {
-        // SAFETY: If non-null, the string is null-terminated
-        unsafe { null_terminated_utf16_to_os_string(T::display_data(self.object).description) }
-    }
-}
-
 impl FilterEnumItem<'_> {
     /// Return the filter ID.
     ///
@@ -401,6 +314,50 @@ impl FilterEnumItem<'_> {
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn id(&self) -> u64 {
         self.object.filterId
+    }
+
+    /// Return the object name, if set.
+    ///
+    /// This corresponds to `displayData.name` in the underlying [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn name(&self) -> Option<OsString> {
+        // SAFETY: If non-null, the string is null-terminated
+        unsafe { null_terminated_utf16_to_os_string(self.object.displayData.name) }
+    }
+
+    /// Return the object description, if set.
+    ///
+    /// This corresponds to `displayData.description` in the underlying [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn description(&self) -> Option<OsString> {
+        // SAFETY: If non-null, the string is null-terminated
+        unsafe { null_terminated_utf16_to_os_string(self.object.displayData.description) }
+    }
+
+    /// Return the object GUID.
+    ///
+    /// This corresponds to the `filterKey` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn guid(&self) -> GUID {
+        self.object.filterKey
+    }
+
+    /// Return the object provider, if set.
+    ///
+    /// This corresponds to the `providerKey` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn provider(&self) -> Option<GUID> {
+        let provider_key = self.object.providerKey;
+        if provider_key.is_null() {
+            None
+        } else {
+            // SAFETY: The provider contains no pointers, and is non-null.
+            Some(unsafe { *provider_key })
+        }
     }
 }
 
@@ -422,5 +379,51 @@ impl SubLayerEnumItem<'_> {
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn persistent(&self) -> bool {
         (self.object.flags & FWPM_SUBLAYER_FLAG_PERSISTENT) != 0
+    }
+
+    /// Return the object name, if set.
+    ///
+    /// This corresponds to `displayData.name` in the underlying [`FWPM_SUBLAYER0`]
+    /// structure.
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn name(&self) -> Option<OsString> {
+        // SAFETY: If non-null, the string is null-terminated
+        unsafe { null_terminated_utf16_to_os_string(self.object.displayData.name) }
+    }
+
+    /// Return the object description, if set.
+    ///
+    /// This corresponds to `displayData.description` in the underlying [`FWPM_SUBLAYER0`]
+    /// structure.
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn description(&self) -> Option<OsString> {
+        // SAFETY: If non-null, the string is null-terminated
+        unsafe { null_terminated_utf16_to_os_string(self.object.displayData.description) }
+    }
+
+    /// Return the object GUID.
+    ///
+    /// This corresponds to the `filterKey` field in [`FWPM_SUBLAYER0`].
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn guid(&self) -> GUID {
+        self.object.subLayerKey
+    }
+
+    /// Return the object provider, if set.
+    ///
+    /// This corresponds to the `providerKey` field in [`FWPM_SUBLAYER0`].
+    ///
+    /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn provider(&self) -> Option<GUID> {
+        let provider_key = self.object.providerKey;
+        if provider_key.is_null() {
+            None
+        } else {
+            // SAFETY: The provider contains no pointers, and is non-null.
+            Some(unsafe { *provider_key })
+        }
     }
 }
