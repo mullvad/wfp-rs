@@ -244,6 +244,130 @@ fn test_enumerate_filters() {
 
 #[test]
 #[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_enumerate_with_template() {
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    // The tests run in parallel and share the machine-global WFP object namespace, so these GUIDs
+    // must not be used by any other test.
+    let test_provider_guid = GUID::from_u128(0x0d0d0d0d_1111_2222_3333_444455556666);
+    let test_sublayer_guid = GUID::from_u128(0x0d0d0d0d_1234_5678_9abc_def012345678);
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    ProviderBuilder::default()
+        .name("Test Template Enumeration Provider")
+        .description("Provider for template enumeration tests")
+        .guid(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add provider");
+
+    SubLayerBuilder::default()
+        .name("Test Template Enumeration Sublayer")
+        .description("Sublayer for template enumeration tests")
+        .weight(100)
+        .guid(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add sublayer");
+
+    for (name, action) in [
+        ("Test Template Filter Block 0", ActionType::Block),
+        ("Test Template Filter Block 1", ActionType::Block),
+        ("Test Template Filter Permit", ActionType::Permit),
+    ] {
+        FilterBuilder::default()
+            .name(name)
+            .description("Filter for template enumeration tests")
+            .action(action)
+            .layer(Layer::ConnectV4)
+            .sublayer(test_sublayer_guid)
+            .provider(test_provider_guid)
+            .add(&transaction)
+            .expect("Should be able to add filter");
+    }
+
+    transaction
+        .commit()
+        .expect("Should be able to commit filter transaction");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    // Only the sublayer belonging to the test provider must be enumerated
+    let template = SubLayerEnumTemplate::default().provider(test_provider_guid);
+    let mut sublayer_enum = SubLayerEnumerator::with_template(&transaction, &template)
+        .expect("Should be able to enumerate sublayers");
+
+    let mut sublayer_names = vec![];
+    while let Some(sublayer) = sublayer_enum.next() {
+        let sublayer = sublayer.expect("Should be able to read sublayer");
+        assert!(
+            sublayer
+                .provider()
+                .is_some_and(|guid| guid_eq(&guid, &test_provider_guid)),
+            "The template should only return sublayers of the test provider"
+        );
+        sublayer_names.push(sublayer.name().expect("The sublayer should have a name"));
+    }
+    assert_eq!(
+        sublayer_names,
+        vec![OsString::from("Test Template Enumeration Sublayer")]
+    );
+    drop(sublayer_enum);
+
+    // Only the filters belonging to the test provider must be enumerated. Filters are always
+    // enumerated one layer at a time; all of the test filters are at the same layer.
+    let template = FilterEnumTemplate::default()
+        .layer(Layer::ConnectV4)
+        .provider(test_provider_guid);
+    let mut filter_enum = FilterEnumerator::with_template(&transaction, &template)
+        .expect("Should be able to enumerate filters");
+
+    let mut filter_names = vec![];
+    while let Some(filter) = filter_enum.next() {
+        let filter = filter.expect("Should be able to read filter");
+        assert!(
+            filter
+                .provider()
+                .is_some_and(|guid| guid_eq(&guid, &test_provider_guid)),
+            "The template should only return filters of the test provider"
+        );
+        filter_names.push(filter.name().expect("The filter should have a name"));
+    }
+    filter_names.sort();
+    assert_eq!(
+        filter_names,
+        vec![
+            OsString::from("Test Template Filter Block 0"),
+            OsString::from("Test Template Filter Block 1"),
+            OsString::from("Test Template Filter Permit"),
+        ]
+    );
+    drop(filter_enum);
+
+    // Restricting the action type must exclude the blocking filters
+    let template = FilterEnumTemplate::default()
+        .layer(Layer::ConnectV4)
+        .provider(test_provider_guid)
+        .action(ActionType::Permit);
+    let mut filter_enum = FilterEnumerator::with_template(&transaction, &template)
+        .expect("Should be able to enumerate filters");
+
+    let mut filter_names = vec![];
+    while let Some(filter) = filter_enum.next() {
+        let filter = filter.expect("Should be able to read filter");
+        filter_names.push(filter.name().expect("The filter should have a name"));
+    }
+    assert_eq!(
+        filter_names,
+        vec![OsString::from("Test Template Filter Permit")]
+    );
+}
+
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
 fn test_add_provider_and_attach_filters() {
     let mut engine = FilterEngineBuilder::default()
         .dynamic()
