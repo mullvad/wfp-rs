@@ -309,7 +309,7 @@ pub struct EnumItem<'a, T: EnumerableObject> {
 impl FilterEnumItem<'_> {
     /// Return the filter ID.
     ///
-    /// This corresponds to the `filterId` field in the underlying `FWPM_FILTER0` structure.
+    /// This corresponds to the `filterId` field in the underlying [`FWPM_FILTER0`] structure.
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn id(&self) -> u64 {
@@ -364,7 +364,7 @@ impl FilterEnumItem<'_> {
 impl SubLayerEnumItem<'_> {
     /// Return the sublayer weight (priority).
     ///
-    /// This corresponds to the `weight` field in the underlying `FWPM_SUBLAYER0` structure.
+    /// This corresponds to the `weight` field in the underlying [`FWPM_SUBLAYER0`] structure.
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn weight(&self) -> u16 {
@@ -374,7 +374,7 @@ impl SubLayerEnumItem<'_> {
     /// Return whether the sublayer is persistent, i.e. survives a Base Filtering Engine restart.
     ///
     /// This corresponds to the `FWPM_SUBLAYER_FLAG_PERSISTENT` bit in the `flags` field of the
-    /// underlying `FWPM_SUBLAYER0` structure.
+    /// underlying [`FWPM_SUBLAYER0`] structure.
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn persistent(&self) -> bool {
