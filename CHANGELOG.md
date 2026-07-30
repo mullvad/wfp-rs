@@ -25,8 +25,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   whether it is persistent.
 
 ### Changed
-- **Breaking**: Update `windows-sys` to 0.61. `GUID` is part of the public API, so dependents have
-  to use the same `windows-sys` version.
+- **Breaking**: Update `windows-sys` to 0.61. `GUID` is part of the public API.
 - **Breaking**: `FilterEnumItem::name` and `FilterEnumItem::description` return `Option<OsString>`
   instead of `io::Result<Option<String>>`. Names that are not valid Unicode are preserved instead
   of being reported as an error.
