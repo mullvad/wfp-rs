@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Add `SubLayerEnumerator`, for enumerating the sublayers registered with the filter engine. Each
   `SubLayerEnumItem` exposes the sublayer's GUID, provider, name, description and weight, and
   whether it is persistent.
+- Add `FilterEnumerator::with_template` and `SubLayerEnumerator::with_template`, for enumerating a
+  subset of the filters or sublayers. `FilterEnumTemplate` and `SubLayerEnumTemplate` correspond to
+  the `FWPM_FILTER_ENUM_TEMPLATE0` and `FWPM_SUBLAYER_ENUM_TEMPLATE0` structures. A
+  `FilterEnumTemplate` always enumerates a single layer, so `FilterEnumTemplate::layer` has to be
+  called before the template can be used.
 
 ### Changed
 - **Breaking**: Update `windows-sys` to 0.61. `GUID` is part of the public API.
