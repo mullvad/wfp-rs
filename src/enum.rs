@@ -405,7 +405,7 @@ impl SubLayerEnumItem<'_> {
 
     /// Return the object GUID.
     ///
-    /// This corresponds to the `filterKey` field in [`FWPM_SUBLAYER0`].
+    /// This corresponds to the `subLayerKey` field in [`FWPM_SUBLAYER0`].
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
     pub fn guid(&self) -> GUID {
