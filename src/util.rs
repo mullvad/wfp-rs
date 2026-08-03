@@ -12,10 +12,15 @@ pub fn string_to_null_terminated_utf16<T: FromIterator<u16>>(s: impl AsRef<OsStr
 ///
 /// Unpaired surrogates are preserved, so this never fails.
 ///
+/// # Panics
+///
+/// This panics if `s` is unaligned.
+///
 /// # Safety
 ///
 /// If non-null, `s` must be null-terminated.
 pub unsafe fn null_terminated_utf16_to_os_string(s: *const u16) -> Option<OsString> {
+    assert!(s.is_aligned());
     if s.is_null() {
         return None;
     }
@@ -30,10 +35,10 @@ pub unsafe fn null_terminated_utf16_to_os_string(s: *const u16) -> Option<OsStri
 ///
 /// # Safety
 ///
-/// `s` must be null-terminated.
+/// `s` must be null-terminated and aligned.
 unsafe fn wcslen(s: *const u16) -> usize {
     let mut current = s;
-    while unsafe { std::ptr::read_unaligned(current) } != 0 {
+    while unsafe { std::ptr::read(current) } != 0 {
         current = unsafe { current.add(1) };
     }
     usize::try_from(unsafe { current.offset_from(s) }).unwrap()
