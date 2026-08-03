@@ -1,11 +1,18 @@
 //! Integration tests for the Windows Filtering Platform library.
 
+use std::ffi::{OsStr, OsString};
 use std::net::{Ipv4Addr, Ipv6Addr};
-
-use windows_sys::core::GUID;
 
 // Import the library modules we want to test
 use wfp::*;
+
+/// `GUID` does not implement `PartialEq`.
+fn guid_eq(left: &GUID, right: &GUID) -> bool {
+    left.data1 == right.data1
+        && left.data2 == right.data2
+        && left.data3 == right.data3
+        && left.data4 == right.data4
+}
 
 #[test]
 #[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
@@ -65,6 +72,178 @@ fn test_add_filters_and_sublayer() {
 
 #[test]
 #[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_enumerate_sublayers() {
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    let test_provider_guid = GUID::from_u128(0x0e0e0e0e_1111_2222_3333_444455556666);
+    let test_guid = GUID::from_u128(0x0e0e0e0e_1234_5678_9abc_def012345678);
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    ProviderBuilder::default()
+        .name("Test Enumeration Provider")
+        .description("Provider for sublayer enumeration tests")
+        .guid(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add provider");
+
+    SubLayerBuilder::default()
+        .name("Test Enumeration Sublayer")
+        .description("Test sublayer for enumeration integration tests")
+        .weight(100)
+        .guid(test_guid)
+        .provider(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add sublayer");
+
+    transaction
+        .commit()
+        .expect("Should be able to commit sublayer transaction");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    let mut sublayer_enum =
+        SubLayerEnumerator::new(&transaction).expect("Should be able to enumerate sublayers");
+
+    let mut found = false;
+
+    while let Some(sublayer) = sublayer_enum.next() {
+        let sublayer = sublayer.expect("Should be able to read sublayer");
+        if !guid_eq(&sublayer.guid(), &test_guid) {
+            continue;
+        }
+
+        assert_eq!(
+            sublayer.name().as_deref(),
+            Some(OsStr::new("Test Enumeration Sublayer"))
+        );
+        assert_eq!(
+            sublayer.description().as_deref(),
+            Some(OsStr::new(
+                "Test sublayer for enumeration integration tests"
+            ))
+        );
+        assert_eq!(sublayer.weight(), 100);
+        assert!(
+            sublayer
+                .provider()
+                .is_some_and(|guid| guid_eq(&guid, &test_provider_guid)),
+            "The sublayer should be attached to the test provider"
+        );
+        assert!(
+            !sublayer.persistent(),
+            "The sublayer was added to a dynamic session"
+        );
+
+        found = true;
+        break;
+    }
+
+    assert!(found, "Should find the sublayer that was just added");
+}
+
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_enumerate_filters() {
+    /// More than the batch size used internally by the enumerator, so that enumeration has to
+    /// fetch several batches.
+    const NUM_FILTERS: u64 = 120;
+
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    let test_provider_guid = GUID::from_u128(0x0f0f0f0f_1111_2222_3333_444455556666);
+    let test_sublayer_guid = GUID::from_u128(0x0f0f0f0f_1234_5678_9abc_def012345678);
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    ProviderBuilder::default()
+        .name("Test Filter Enumeration Provider")
+        .description("Provider for filter enumeration tests")
+        .guid(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add provider");
+
+    SubLayerBuilder::default()
+        .name("Test Filter Enumeration Sublayer")
+        .description("Sublayer for filter enumeration tests")
+        .weight(100)
+        .guid(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add sublayer");
+
+    for i in 0..NUM_FILTERS {
+        FilterBuilder::default()
+            .name(format!("Test Enumeration Filter {i}"))
+            .description("Filter for enumeration integration tests")
+            .action(ActionType::Block)
+            .layer(Layer::ConnectV4)
+            .condition(
+                PortConditionBuilder::remote()
+                    .equal(1024 + i as u16)
+                    .build(),
+            )
+            .sublayer(test_sublayer_guid)
+            .provider(test_provider_guid)
+            .add(&transaction)
+            .expect("Should be able to add filter");
+    }
+
+    transaction
+        .commit()
+        .expect("Should be able to commit filter transaction");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    let mut filter_enum =
+        FilterEnumerator::new(&transaction).expect("Should be able to enumerate filters");
+
+    let mut found_names = vec![];
+    let mut ids = vec![];
+
+    while let Some(filter) = filter_enum.next() {
+        let filter = filter.expect("Should be able to read filter");
+
+        // Filters added by other providers are expected; only look at our own
+        if !filter
+            .provider()
+            .is_some_and(|guid| guid_eq(&guid, &test_provider_guid))
+        {
+            continue;
+        }
+
+        assert_eq!(
+            filter.description().as_deref(),
+            Some(OsStr::new("Filter for enumeration integration tests"))
+        );
+
+        ids.push(filter.id());
+        found_names.push(filter.name().expect("The filter should have a name"));
+    }
+
+    // All of the filters we added must be enumerated, which requires several batches
+    found_names.sort();
+    let mut expected_names: Vec<_> = (0..NUM_FILTERS)
+        .map(|i| OsString::from(format!("Test Enumeration Filter {i}")))
+        .collect();
+    expected_names.sort();
+    assert_eq!(found_names, expected_names);
+
+    // Filter IDs are assigned by WFP and must be unique
+    ids.sort_unstable();
+    let num_ids = ids.len();
+    ids.dedup();
+    assert_eq!(ids.len(), num_ids, "Filter IDs should be unique");
+}
+
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
 fn test_add_provider_and_attach_filters() {
     let mut engine = FilterEngineBuilder::default()
         .dynamic()
@@ -119,7 +298,7 @@ fn test_app_id_condition() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = windows_sys::core::GUID::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
+    let test_guid = GUID::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
 
     SubLayerBuilder::default()
         .name("Test AppId Sublayer")
