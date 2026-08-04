@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## [Unreleased]
+
+
+## [0.1.0] - 2026-08-04
 ### Added
 - Add `FilterEngineBuilder::transaction_timeout`, which sets how long `Transaction::new` waits for
   the transaction lock before failing with `FWP_E_TIMEOUT`.
