@@ -6,6 +6,11 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 // Import the library modules we want to test
 use wfp::*;
 
+// These tests run concurrently (the default test harness) against the same real, global WFP
+// engine. Each test therefore uses a unique sublayer weight: BFE breaks ties between
+// same-weight sublayers by bumping the weight reported for one of them, which would otherwise
+// make `sublayer.weight()` assertions intermittently fail depending on scheduling.
+
 /// `GUID` does not implement `PartialEq`.
 fn guid_eq(left: &GUID, right: &GUID) -> bool {
     left.data1 == right.data1
@@ -93,7 +98,7 @@ fn test_enumerate_sublayers() {
     SubLayerBuilder::default()
         .name("Test Enumeration Sublayer")
         .description("Test sublayer for enumeration integration tests")
-        .weight(100)
+        .weight(101)
         .guid(test_guid)
         .provider(test_provider_guid)
         .add(&transaction)
@@ -126,7 +131,7 @@ fn test_enumerate_sublayers() {
                 "Test sublayer for enumeration integration tests"
             ))
         );
-        assert_eq!(sublayer.weight(), 100);
+        assert_eq!(sublayer.weight(), 101);
         assert!(
             sublayer
                 .provider()
@@ -172,7 +177,7 @@ fn test_enumerate_filters() {
     SubLayerBuilder::default()
         .name("Test Filter Enumeration Sublayer")
         .description("Sublayer for filter enumeration tests")
-        .weight(100)
+        .weight(102)
         .guid(test_sublayer_guid)
         .provider(test_provider_guid)
         .add(&transaction)
@@ -266,7 +271,7 @@ fn test_add_provider_and_attach_filters() {
     SubLayerBuilder::default()
         .name("Test Provider Sublayer")
         .description("Sublayer attached to test provider")
-        .weight(100)
+        .weight(103)
         .guid(test_sublayer_guid)
         .provider(test_provider_guid)
         .add(&transaction)
@@ -303,7 +308,7 @@ fn test_app_id_condition() {
     SubLayerBuilder::default()
         .name("Test AppId Sublayer")
         .description("Test sublayer for app ID integration tests")
-        .weight(100)
+        .weight(104)
         .guid(test_guid)
         .add(&transaction)
         .expect("Should be able to add sublayer");
@@ -351,7 +356,7 @@ fn test_ndp_filter() {
     SubLayerBuilder::default()
         .name("Test NDP Sublayer")
         .description("Test sublayer for NDP integration test")
-        .weight(100)
+        .weight(105)
         .guid(test_guid)
         .add(&transaction)
         .expect("Should be able to add sublayer");
@@ -413,7 +418,7 @@ fn test_local_interface_condition() {
     SubLayerBuilder::default()
         .name("Test Interface Sublayer")
         .description("Test sublayer for interface condition integration tests")
-        .weight(100)
+        .weight(106)
         .guid(test_guid)
         .add(&transaction)
         .expect("Should be able to add sublayer");
@@ -460,7 +465,7 @@ fn test_ip_address_subnet_condition() {
     SubLayerBuilder::default()
         .name("Test IP Address Sublayer")
         .description("Test sublayer for IP-prefix integration tests")
-        .weight(100)
+        .weight(107)
         .guid(test_guid)
         .add(&transaction)
         .expect("Should be able to add sublayer");
