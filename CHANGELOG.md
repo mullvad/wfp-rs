@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - Committed transactions were incorrectly "aborted" on drop.
 
+### Changed
+- **Breaking**: `FilterBuilder::add` returns the ID of the new filter instead of `()`.
+
 
 ## [0.1.0] - 2026-08-04
 ### Added
