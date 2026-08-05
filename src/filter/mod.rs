@@ -302,10 +302,10 @@ impl FilterBuilder<FilterBuilderHasName, FilterBuilderHasAction> {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` on success, or an error if the filter could not be added.
+    /// Returns the filter ID on success, or an error if the filter could not be added.
     ///
     /// [`FwpmFilterAdd0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmfilteradd0
-    pub fn add<'a>(&self, transaction: &Transaction<'a>) -> io::Result<()> {
+    pub fn add<'a>(&self, transaction: &Transaction<'a>) -> io::Result<u64> {
         // Convert conditions to FWPM_FILTER_CONDITION0 array
         let fwpm_conditions: Vec<FWPM_FILTER_CONDITION0> = self
             .conditions
@@ -329,23 +329,26 @@ impl FilterBuilder<FilterBuilderHasName, FilterBuilderHasAction> {
             filter.weight.Anonymous.uint64 = &self.weight_value as *const u64 as *mut u64;
         }
 
+        let mut id = 0;
+
         // SAFETY:
         // - &filter is a valid pointer to a properly initialized FWPM_FILTER0 structure
         // - All pointers and data have the same lifetime as `self` (at least)
-        // - NULL security descriptor and filter ID pointers are acceptable
+        // - A NULL security descriptor pointer is acceptable
+        // - &raw mut id is a valid pointer to a u64
         let status = unsafe {
             FwpmFilterAdd0(
                 transaction.engine.as_raw_handle(),
                 &filter,
                 ptr::null_mut(),
-                ptr::null_mut(),
+                &raw mut id,
             )
         };
         if status != ERROR_SUCCESS {
             return Err(io::Error::from_raw_os_error(status as i32));
         }
 
-        Ok(())
+        Ok(id)
     }
 }
 
