@@ -74,7 +74,7 @@ impl FilterEngineBuilder {
         // - RPC_C_AUTHN_DEFAULT is a valid authentication service constant
         // - self.session is a properly initialized FWPM_SESSION0 structure
         // - handle is a valid mutable pointer to receive the engine handle
-        let result = unsafe {
+        let status = unsafe {
             FwpmEngineOpen0(
                 ptr::null_mut(),
                 RPC_C_AUTHN_DEFAULT as u32,
@@ -83,8 +83,8 @@ impl FilterEngineBuilder {
                 &mut handle,
             )
         };
-        if result != STATUS_SUCCESS as u32 {
-            return Err(io::Error::last_os_error());
+        if status != STATUS_SUCCESS as u32 {
+            return Err(io::Error::from_raw_os_error(status as i32));
         }
         Ok(FilterEngine { handle })
     }
