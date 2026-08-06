@@ -1,6 +1,7 @@
 //! Transaction creation and management
 
 use std::io;
+use std::mem;
 use std::os::windows::io::AsRawHandle;
 
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
@@ -72,6 +73,8 @@ impl<'a> Transaction<'a> {
             return Err(io::Error::from_raw_os_error(status as i32));
         }
 
+        mem::forget(self);
+
         Ok(())
     }
 
@@ -83,7 +86,11 @@ impl<'a> Transaction<'a> {
     ///
     /// [`FwpmTransactionAbort0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmtransactionabort0
     pub fn abort(self) -> io::Result<()> {
-        self.abort_inner()
+        self.abort_inner()?;
+
+        mem::forget(self);
+
+        Ok(())
     }
 
     fn abort_inner(&self) -> io::Result<()> {
