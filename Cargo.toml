@@ -1,6 +1,6 @@
 [package]
 name = "wfp"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Mullvad VPN"]
 edition = "2024"
 description = "A Rust library for the Windows Filtering Platform (WFP) API"
