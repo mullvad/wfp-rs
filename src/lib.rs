@@ -67,7 +67,10 @@ mod util;
 pub use action::ActionType;
 pub use condition::*;
 pub use engine::{FilterEngine, FilterEngineBuilder};
-pub use r#enum::{FilterEnumItem, FilterEnumerator, SubLayerEnumItem, SubLayerEnumerator};
+pub use r#enum::{
+    FilterEnumItem, FilterEnumTemplate, FilterEnumTemplateHasLayer, FilterEnumTemplateMissingLayer,
+    FilterEnumType, FilterEnumerator, SubLayerEnumItem, SubLayerEnumTemplate, SubLayerEnumerator,
+};
 pub use filter::*;
 pub use layer::*;
 pub use provider::*;
