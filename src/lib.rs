@@ -64,7 +64,7 @@ mod transaction;
 mod util;
 
 // Re-export public API
-pub use action::ActionType;
+pub use action::{ActionType, FilterAction};
 pub use condition::*;
 pub use engine::{FilterEngine, FilterEngineBuilder};
 pub use r#enum::{FilterEnumItem, FilterEnumerator, SubLayerEnumItem, SubLayerEnumerator};
