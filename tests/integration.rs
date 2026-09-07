@@ -502,3 +502,207 @@ fn test_ip_address_subnet_condition() {
         .commit()
         .expect("Should be able to commit IP-address filter transaction");
 }
+
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_filter_metadata_round_trip() {
+    const EXACT_WEIGHT: u64 = 0x0123_4567_89ab_cdef;
+    const RANGE_WEIGHT: u8 = 5;
+
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    let test_provider_guid = GUID::from_u128(0x0a0a0a0a_1111_2222_3333_444455556666);
+    let test_sublayer_guid = GUID::from_u128(0x0a0a0a0a_1234_5678_9abc_def012345678);
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    ProviderBuilder::default()
+        .name("Test Metadata Provider")
+        .description("Provider for filter metadata round-trip tests")
+        .guid(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add provider");
+
+    SubLayerBuilder::default()
+        .name("Test Metadata Sublayer")
+        .description("Sublayer for filter metadata round-trip tests")
+        .weight(108)
+        .guid(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .add(&transaction)
+        .expect("Should be able to add sublayer");
+
+    // Every filter below is narrowed to an unused high port, so that committing them cannot
+    // disturb real traffic on the machine running the tests.
+
+    FilterBuilder::default()
+        .name("Exact weight filter")
+        .description("Filter with an exact weight")
+        .action(ActionType::Permit)
+        .layer(Layer::ConnectV6)
+        .sublayer(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .weight(FilterWeight::Exact(EXACT_WEIGHT))
+        .condition(ProtocolConditionBuilder::tcp().build())
+        .condition(PortConditionBuilder::remote().equal(44443).build())
+        .add(&transaction)
+        .expect("Should be able to add exact weight filter");
+
+    FilterBuilder::default()
+        .name("Range weight filter")
+        .description("Filter with a range weight")
+        .action(ActionType::Block)
+        .layer(Layer::ConnectV4)
+        .sublayer(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .weight(WeightRange::try_from(RANGE_WEIGHT).unwrap())
+        .condition(PortConditionBuilder::remote().equal(44444).build())
+        .add(&transaction)
+        .expect("Should be able to add range weight filter");
+
+    FilterBuilder::default()
+        .name("Auto weight filter")
+        .description("Filter with an automatic weight")
+        .action(ActionType::Block)
+        .layer(Layer::ConnectV4)
+        .sublayer(test_sublayer_guid)
+        .provider(test_provider_guid)
+        .weight(FilterWeight::Auto)
+        .condition(PortConditionBuilder::remote().equal(44445).build())
+        .add(&transaction)
+        .expect("Should be able to add auto weight filter");
+
+    transaction
+        .commit()
+        .expect("Should be able to commit metadata filter transaction");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    let mut filter_enum =
+        FilterEnumerator::new(&transaction).expect("Should be able to enumerate filters");
+
+    let mut found_names = vec![];
+
+    while let Some(filter) = filter_enum.next() {
+        let filter = filter.expect("Should be able to read filter");
+
+        // Filters added by other providers are expected; only look at our own
+        if !filter
+            .provider()
+            .is_some_and(|guid| guid_eq(&guid, &test_provider_guid))
+        {
+            continue;
+        }
+
+        assert!(
+            guid_eq(&filter.sublayer(), &test_sublayer_guid),
+            "The filter should be attached to the test sublayer"
+        );
+
+        let name = filter.name().expect("The filter should have a name");
+        match name.to_str().expect("The filter name should be Unicode") {
+            "Exact weight filter" => {
+                assert_eq!(filter.layer(), Some(Layer::ConnectV6));
+                assert!(guid_eq(&filter.layer_guid(), Layer::ConnectV6.guid()));
+                assert_eq!(filter.action(), FilterAction::Permit);
+                assert_eq!(filter.weight(), Some(FilterWeight::Exact(EXACT_WEIGHT)));
+                assert_eq!(
+                    filter.effective_weight(),
+                    Some(EXACT_WEIGHT),
+                    "An exact weight is used verbatim as the effective weight"
+                );
+                assert_eq!(filter.num_conditions(), 2);
+            }
+            "Range weight filter" => {
+                assert_eq!(filter.layer(), Some(Layer::ConnectV4));
+                assert!(guid_eq(&filter.layer_guid(), Layer::ConnectV4.guid()));
+                assert_eq!(filter.action(), FilterAction::Block);
+                assert_eq!(
+                    filter.weight(),
+                    Some(FilterWeight::Range(
+                        WeightRange::try_from(RANGE_WEIGHT).unwrap()
+                    ))
+                );
+                let effective = filter
+                    .effective_weight()
+                    .expect("An added filter should have an effective weight");
+                assert_eq!(
+                    effective >> 60,
+                    u64::from(RANGE_WEIGHT),
+                    "A range weight sets the high-order 4 bits of the effective weight: {effective:#x}"
+                );
+                assert_eq!(filter.num_conditions(), 1);
+            }
+            "Auto weight filter" => {
+                assert_eq!(filter.layer(), Some(Layer::ConnectV4));
+                assert_eq!(filter.action(), FilterAction::Block);
+                assert_eq!(filter.weight(), Some(FilterWeight::Auto));
+                let effective = filter
+                    .effective_weight()
+                    .expect("An added filter should have an effective weight");
+                assert!(
+                    effective < 1 << 60,
+                    "BFE generates automatic weights in [0, 2^60): {effective:#x}"
+                );
+                assert_eq!(filter.num_conditions(), 1);
+            }
+            other => panic!("Unexpected filter {other:?} under the test provider"),
+        }
+
+        found_names.push(name);
+    }
+
+    found_names.sort();
+    assert_eq!(
+        found_names,
+        [
+            "Auto weight filter",
+            "Exact weight filter",
+            "Range weight filter",
+        ]
+        .map(OsString::from)
+    );
+}
+
+/// Enumeration returns every filter on the system, including filters at layers that [`Layer`] does
+/// not name. Those must be reported as an unknown layer rather than being mapped onto a variant.
+#[test]
+#[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
+fn test_enumerate_unknown_layers() {
+    let mut engine = FilterEngineBuilder::default()
+        .dynamic()
+        .open()
+        .expect("Should be able to open filter engine");
+
+    let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
+
+    let mut filter_enum =
+        FilterEnumerator::new(&transaction).expect("Should be able to enumerate filters");
+
+    let mut num_known = 0usize;
+    let mut num_unknown = 0usize;
+
+    while let Some(filter) = filter_enum.next() {
+        let filter = filter.expect("Should be able to read filter");
+
+        match filter.layer() {
+            Some(layer) => {
+                assert!(
+                    guid_eq(&filter.layer_guid(), layer.guid()),
+                    "`layer` and `layer_guid` should agree"
+                );
+                num_known += 1;
+            }
+            None => num_unknown += 1,
+        }
+    }
+
+    // Windows always installs filters of its own, at far more layers than `Layer` names
+    assert!(
+        num_unknown > 0,
+        "Expected some filters at layers outside `Layer` ({num_known} known, {num_unknown} unknown)"
+    );
+}

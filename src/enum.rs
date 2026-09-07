@@ -1,7 +1,7 @@
 //! Enumeration over WFP objects.
 
 use crate::util::null_terminated_utf16_to_os_string;
-use crate::{GUID, Transaction};
+use crate::{FilterAction, FilterWeight, GUID, Layer, Transaction, WeightRange};
 
 use std::ffi::OsString;
 use std::io;
@@ -9,10 +9,10 @@ use std::os::windows::io::AsRawHandle;
 use std::ptr;
 use windows_sys::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS, HANDLE};
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
-    FWPM_FILTER_ENUM_TEMPLATE0, FWPM_FILTER0, FWPM_SUBLAYER_ENUM_TEMPLATE0,
-    FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmFilterCreateEnumHandle0,
-    FwpmFilterDestroyEnumHandle0, FwpmFilterEnum0, FwpmFreeMemory0, FwpmSubLayerCreateEnumHandle0,
-    FwpmSubLayerDestroyEnumHandle0, FwpmSubLayerEnum0,
+    FWP_EMPTY, FWP_UINT8, FWP_UINT64, FWP_VALUE0, FWPM_FILTER_ENUM_TEMPLATE0, FWPM_FILTER0,
+    FWPM_SUBLAYER_ENUM_TEMPLATE0, FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0,
+    FwpmFilterCreateEnumHandle0, FwpmFilterDestroyEnumHandle0, FwpmFilterEnum0, FwpmFreeMemory0,
+    FwpmSubLayerCreateEnumHandle0, FwpmSubLayerDestroyEnumHandle0, FwpmSubLayerEnum0,
 };
 
 mod private {
@@ -115,6 +115,55 @@ impl EnumerableObject for SubLayer {
 pub type FilterEnumerator<'a> = Enumerator<'a, Filter>;
 
 /// A WFP filter
+///
+/// # Example
+///
+/// Inspecting the filters that belong to a particular provider and sublayer:
+///
+/// ```no_run
+/// use wfp::{FilterEngineBuilder, FilterEnumerator, GUID, Transaction};
+/// use std::io;
+///
+/// const MY_PROVIDER: GUID = GUID::from_u128(0x0f0f0f0f_1111_2222_3333_444455556666);
+/// const MY_SUBLAYER: GUID = GUID::from_u128(0x0f0f0f0f_1234_5678_9abc_def012345678);
+///
+/// /// `GUID` does not implement `PartialEq`.
+/// fn guid_eq(left: &GUID, right: &GUID) -> bool {
+///     left.data1 == right.data1
+///         && left.data2 == right.data2
+///         && left.data3 == right.data3
+///         && left.data4 == right.data4
+/// }
+///
+/// fn main() -> io::Result<()> {
+///     let mut engine = FilterEngineBuilder::default().dynamic().open()?;
+///     let t = Transaction::new(&mut engine)?;
+///
+///     let mut filter_enum = FilterEnumerator::new(&t)?;
+///
+///     while let Some(filter) = filter_enum.next() {
+///         let filter = filter?;
+///
+///         // Enumeration returns every filter on the system, so skip the ones that are not ours
+///         let is_ours = filter
+///             .provider()
+///             .is_some_and(|guid| guid_eq(&guid, &MY_PROVIDER))
+///             && guid_eq(&filter.sublayer(), &MY_SUBLAYER);
+///         if !is_ours {
+///             continue;
+///         }
+///
+///         println!("{:?}", filter.name());
+///         println!("  layer:            {:?}", filter.layer());
+///         println!("  action:           {:?}", filter.action());
+///         println!("  weight:           {:?}", filter.weight());
+///         println!("  effective weight: {:?}", filter.effective_weight());
+///         println!("  conditions:       {}", filter.num_conditions());
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub type FilterEnumItem<'a> = EnumItem<'a, Filter>;
 
 /// An iterator over sublayers.
@@ -359,6 +408,101 @@ impl FilterEnumItem<'_> {
             Some(unsafe { *provider_key })
         }
     }
+
+    /// Return the layer the filter is attached to, or `None` if it is not one of the layers named
+    /// by [`Layer`].
+    ///
+    /// Enumeration returns every filter on the system, most of which sit at layers that this
+    /// crate cannot build filters for. Use [`Self::layer_guid`] to read those.
+    ///
+    /// This corresponds to the `layerKey` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn layer(&self) -> Option<Layer> {
+        Layer::from_guid(&self.object.layerKey)
+    }
+
+    /// Return the GUID of the layer the filter is attached to.
+    ///
+    /// Unlike [`Self::layer`], this is available for every layer, including those that [`Layer`]
+    /// does not name.
+    ///
+    /// This corresponds to the `layerKey` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn layer_guid(&self) -> GUID {
+        self.object.layerKey
+    }
+
+    /// Return the GUID of the sublayer the filter is attached to.
+    ///
+    /// This corresponds to the `subLayerKey` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn sublayer(&self) -> GUID {
+        self.object.subLayerKey
+    }
+
+    /// Return the weight that was requested when the filter was added, or `None` if it is not one
+    /// of the value types that [`FilterWeight`] describes.
+    ///
+    /// This is the weight as specified by whoever added the filter, which may be
+    /// [`FilterWeight::Auto`]. It is *not* the weight that decides evaluation order; see
+    /// [`Self::effective_weight`] for that.
+    ///
+    /// This corresponds to the `weight` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn weight(&self) -> Option<FilterWeight> {
+        let weight = &self.object.weight;
+        match weight.r#type {
+            FWP_EMPTY => Some(FilterWeight::Auto),
+            FWP_UINT8 => {
+                // SAFETY: The value is tagged FWP_UINT8, so `uint8` is the active union field.
+                let raw = unsafe { weight.Anonymous.uint8 };
+                WeightRange::try_from(raw).ok().map(FilterWeight::Range)
+            }
+            FWP_UINT64 => {
+                // SAFETY: The FWP_VALUE0 type matches the value when set by WFP.
+                unsafe { uint64_value(weight) }.map(FilterWeight::Exact)
+            }
+            _ => None,
+        }
+    }
+
+    /// Return the weight that the Base Filtering Engine resolved for the filter, or `None` if it
+    /// is not a `FWP_UINT64` value.
+    ///
+    /// Filters within a sublayer are evaluated in order of decreasing effective weight, so this
+    /// is the weight to compare when reasoning about filter arbitration. See the
+    /// [Filter Arbitration] documentation for details.
+    ///
+    /// This corresponds to the `effectiveWeight` field in [`FWPM_FILTER0`].
+    ///
+    /// [Filter Arbitration]: https://docs.microsoft.com/en-us/windows/win32/fwp/filter-arbitration
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn effective_weight(&self) -> Option<u64> {
+        // SAFETY: The FWP_VALUE0 type matches the value when set by WFP.
+        unsafe { uint64_value(&self.object.effectiveWeight) }
+    }
+
+    /// Return the action taken when the filter matches network traffic.
+    ///
+    /// This corresponds to the `action.type` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn action(&self) -> FilterAction {
+        FilterAction::from_raw(self.object.action.r#type)
+    }
+
+    /// Return the number of conditions that traffic must match for the filter to apply.
+    ///
+    /// This corresponds to the `numFilterConditions` field in [`FWPM_FILTER0`].
+    ///
+    /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
+    pub fn num_conditions(&self) -> u32 {
+        self.object.numFilterConditions
+    }
 }
 
 impl SubLayerEnumItem<'_> {
@@ -426,4 +570,25 @@ impl SubLayerEnumItem<'_> {
             Some(unsafe { *provider_key })
         }
     }
+}
+
+/// Read the `u64` out of `value`, or `None` if it is not a `FWP_UINT64` or the pointer is null.
+///
+/// For `FWP_UINT64` the value is not stored inline: the `uint64` union field is a pointer to the
+/// actual value.
+///
+/// # Safety
+///
+/// If `value` is tagged `FWP_UINT64`, its `uint64` pointer must be null or point to a live `u64`.
+unsafe fn uint64_value(value: &FWP_VALUE0) -> Option<u64> {
+    if value.r#type != FWP_UINT64 {
+        return None;
+    }
+    // SAFETY: The value is tagged FWP_UINT64, so `uint64` is the active union field.
+    let ptr = unsafe { value.Anonymous.uint64 };
+    if ptr.is_null() {
+        return None;
+    }
+    // SAFETY: The pointer is non-null and points to a live u64, per the safety requirements.
+    Some(unsafe { *ptr })
 }

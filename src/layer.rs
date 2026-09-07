@@ -1,6 +1,7 @@
 //! Layers
 
 use crate::GUID;
+use crate::util::guid_eq;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::*;
 
 /// Specifies the network layer at which a filter operates.
@@ -10,6 +11,9 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::*;
 /// to predefined layer GUIDs in the Windows Filtering Platform.
 ///
 /// For more information about filtering layers, see the [WFP Layer Reference].
+///
+/// This enum names only the layers that this crate can build filters for. Filters read back from
+/// the filter engine may sit at any layer, so [`Layer::from_guid`] returns [`None`] for the rest.
 ///
 /// [WFP Layer Reference]: https://docs.microsoft.com/en-us/windows/win32/fwp/management-filtering-layer-identifiers-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +109,30 @@ pub enum Layer {
 }
 
 impl Layer {
+    /// Returns the layer identified by `guid`, or `None` if it is not one of the layers named by
+    /// this enum.
+    ///
+    /// The Windows Filtering Platform defines many more layers than this crate can build filters
+    /// for, so this returns `None` for most layers seen when enumerating the filters installed on
+    /// a system. See the `layer_guid` getter on [`FilterEnumItem`] for reading such a layer as a
+    /// raw GUID.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use wfp::Layer;
+    ///
+    /// let guid = *Layer::ConnectV4.guid();
+    /// assert_eq!(Layer::from_guid(&guid), Some(Layer::ConnectV4));
+    /// ```
+    ///
+    /// [`FilterEnumItem`]: crate::FilterEnumItem
+    pub fn from_guid(guid: &GUID) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|layer| guid_eq(layer.guid(), guid))
+    }
+
     /// Returns the Windows GUID identifier for this layer.
     ///
     /// This is used internally when communicating with the Windows Filtering Platform API.
@@ -126,4 +154,24 @@ impl Layer {
             Self::OutboundTransportV6 => &FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
         }
     }
+
+    /// Every variant of this enum.
+    ///
+    /// A new variant must be added both here and to [`Layer::guid`].
+    const ALL: [Self; 14] = [
+        Self::AcceptV4,
+        Self::AcceptV6,
+        Self::ConnectV4,
+        Self::ConnectV6,
+        Self::FlowEstablishedV4,
+        Self::FlowEstablishedV6,
+        Self::InboundIpPacketV4,
+        Self::InboundIpPacketV6,
+        Self::OutboundIpPacketV4,
+        Self::OutboundIpPacketV6,
+        Self::InboundTransportV4,
+        Self::InboundTransportV6,
+        Self::OutboundTransportV4,
+        Self::OutboundTransportV6,
+    ];
 }
