@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## [Unreleased]
+### Added
+- Add more getters to `FilterEnumItem`: `layer`, `layer_guid`, `sublayer`, `weight`,
+  `effective_weight`, `action` and `num_conditions`.
+- Add `Layer::from_guid`, which returns the layer identified by a GUID, or `None` for layers that
+  `Layer` does not name.
+- Add `FilterAction`, the read-only counterpart to `ActionType`. Unlike `ActionType`, it covers every
+  `FWP_ACTION_TYPE` that enumeration can return, including the callout actions. Unrecognized actions
+  are preserved as `FilterAction::Unknown` instead of being mapped onto block or permit.
 
 
 ## [0.2.0] - 2026-08-07
