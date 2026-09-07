@@ -2,6 +2,8 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::{ffi::OsStr, iter, os::windows::ffi::OsStrExt};
 
+use crate::GUID;
+
 /// Convert `s` to a null-terminated UTF-16 string
 pub fn string_to_null_terminated_utf16<T: FromIterator<u16>>(s: impl AsRef<OsStr>) -> T {
     s.as_ref().encode_wide().chain(iter::once(0u16)).collect()
@@ -42,4 +44,14 @@ unsafe fn wcslen(s: *const u16) -> usize {
         current = unsafe { current.add(1) };
     }
     usize::try_from(unsafe { current.offset_from(s) }).unwrap()
+}
+
+/// Compare two GUIDs for equality.
+///
+/// [`GUID`] does not implement [`PartialEq`], so the fields are compared one by one.
+pub fn guid_eq(left: &GUID, right: &GUID) -> bool {
+    left.data1 == right.data1
+        && left.data2 == right.data2
+        && left.data3 == right.data3
+        && left.data4 == right.data4
 }
