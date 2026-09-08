@@ -1,7 +1,7 @@
 //! Enumeration over WFP objects.
 
 use crate::util::null_terminated_utf16_to_os_string;
-use crate::{GUID, Transaction};
+use crate::{Guid, Transaction};
 
 use std::ffi::OsString;
 use std::io;
@@ -341,8 +341,8 @@ impl FilterEnumItem<'_> {
     /// This corresponds to the `filterKey` field in [`FWPM_FILTER0`].
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn guid(&self) -> GUID {
-        self.object.filterKey
+    pub fn guid(&self) -> Guid {
+        Guid::from(self.object.filterKey)
     }
 
     /// Return the object provider, if set.
@@ -350,13 +350,13 @@ impl FilterEnumItem<'_> {
     /// This corresponds to the `providerKey` field in [`FWPM_FILTER0`].
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn provider(&self) -> Option<GUID> {
+    pub fn provider(&self) -> Option<Guid> {
         let provider_key = self.object.providerKey;
         if provider_key.is_null() {
             None
         } else {
             // SAFETY: The provider contains no pointers, and is non-null.
-            Some(unsafe { *provider_key })
+            Some(Guid::from(unsafe { *provider_key }))
         }
     }
 }
@@ -408,8 +408,8 @@ impl SubLayerEnumItem<'_> {
     /// This corresponds to the `subLayerKey` field in [`FWPM_SUBLAYER0`].
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn guid(&self) -> GUID {
-        self.object.subLayerKey
+    pub fn guid(&self) -> Guid {
+        Guid::from(self.object.subLayerKey)
     }
 
     /// Return the object provider, if set.
@@ -417,13 +417,13 @@ impl SubLayerEnumItem<'_> {
     /// This corresponds to the `providerKey` field in [`FWPM_SUBLAYER0`].
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/
-    pub fn provider(&self) -> Option<GUID> {
+    pub fn provider(&self) -> Option<Guid> {
         let provider_key = self.object.providerKey;
         if provider_key.is_null() {
             None
         } else {
             // SAFETY: The provider contains no pointers, and is non-null.
-            Some(unsafe { *provider_key })
+            Some(Guid::from(unsafe { *provider_key }))
         }
     }
 }
