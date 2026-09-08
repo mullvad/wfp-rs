@@ -17,13 +17,14 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_FILTER_FLAG_PERSISTENT, FWPM_FILTER0, FwpmFilterAdd0, FwpmFilterDeleteById0,
     FwpmFilterDeleteByKey0,
 };
+use windows_sys::core::GUID;
 
+use crate::Guid;
 use crate::action::ActionType;
 use crate::condition::Condition;
 use crate::layer::Layer;
 use crate::transaction::Transaction;
 use crate::util::string_to_null_terminated_utf16;
-use crate::{GUID, Guid};
 
 /// Builder for creating Windows Filtering Platform filters.
 ///

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::GUID;
+use windows_sys::core::GUID;
 
 /// A globally unique identifier for a WFP object, such as a filter, sublayer or provider.
 ///
