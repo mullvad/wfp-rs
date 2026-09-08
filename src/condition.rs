@@ -17,10 +17,11 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_CONDITION_IP_LOCAL_PORT, FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_ADDRESS,
     FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
 };
+use windows_sys::core::GUID;
 
+use crate::Guid;
 use crate::blob::{OwnedByteBlob, app_id_from_filename};
 use crate::util::string_to_null_terminated_utf16;
-use crate::{GUID, Guid};
 
 // In `fwpmu.h`, `FWPM_CONDITION_ICMP_TYPE` and `FWPM_CONDITION_ICMP_CODE` are
 // `#define`d as aliases for `FWPM_CONDITION_IP_LOCAL_PORT` and
