@@ -1,6 +1,6 @@
 //! Layers
 
-use crate::GUID;
+use crate::Guid;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::*;
 
 /// Specifies the network layer at which a filter operates.
@@ -108,22 +108,23 @@ impl Layer {
     /// Returns the Windows GUID identifier for this layer.
     ///
     /// This is used internally when communicating with the Windows Filtering Platform API.
-    pub fn guid(&self) -> &GUID {
-        match self {
-            Self::AcceptV4 => &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-            Self::AcceptV6 => &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-            Self::ConnectV4 => &FWPM_LAYER_ALE_AUTH_CONNECT_V4,
-            Self::ConnectV6 => &FWPM_LAYER_ALE_AUTH_CONNECT_V6,
-            Self::FlowEstablishedV4 => &FWPM_LAYER_ALE_FLOW_ESTABLISHED_V4,
-            Self::FlowEstablishedV6 => &FWPM_LAYER_ALE_FLOW_ESTABLISHED_V6,
-            Self::InboundIpPacketV4 => &FWPM_LAYER_INBOUND_IPPACKET_V4,
-            Self::InboundIpPacketV6 => &FWPM_LAYER_INBOUND_IPPACKET_V6,
-            Self::OutboundIpPacketV4 => &FWPM_LAYER_OUTBOUND_IPPACKET_V4,
-            Self::OutboundIpPacketV6 => &FWPM_LAYER_OUTBOUND_IPPACKET_V6,
-            Self::InboundTransportV4 => &FWPM_LAYER_INBOUND_TRANSPORT_V4,
-            Self::InboundTransportV6 => &FWPM_LAYER_INBOUND_TRANSPORT_V6,
-            Self::OutboundTransportV4 => &FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
-            Self::OutboundTransportV6 => &FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
-        }
+    pub const fn guid(&self) -> Guid {
+        let guid = match self {
+            Self::AcceptV4 => FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+            Self::AcceptV6 => FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+            Self::ConnectV4 => FWPM_LAYER_ALE_AUTH_CONNECT_V4,
+            Self::ConnectV6 => FWPM_LAYER_ALE_AUTH_CONNECT_V6,
+            Self::FlowEstablishedV4 => FWPM_LAYER_ALE_FLOW_ESTABLISHED_V4,
+            Self::FlowEstablishedV6 => FWPM_LAYER_ALE_FLOW_ESTABLISHED_V6,
+            Self::InboundIpPacketV4 => FWPM_LAYER_INBOUND_IPPACKET_V4,
+            Self::InboundIpPacketV6 => FWPM_LAYER_INBOUND_IPPACKET_V6,
+            Self::OutboundIpPacketV4 => FWPM_LAYER_OUTBOUND_IPPACKET_V4,
+            Self::OutboundIpPacketV6 => FWPM_LAYER_OUTBOUND_IPPACKET_V6,
+            Self::InboundTransportV4 => FWPM_LAYER_INBOUND_TRANSPORT_V4,
+            Self::InboundTransportV6 => FWPM_LAYER_INBOUND_TRANSPORT_V6,
+            Self::OutboundTransportV4 => FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
+            Self::OutboundTransportV6 => FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
+        };
+        Guid::from_raw(guid)
     }
 }

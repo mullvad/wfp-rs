@@ -11,9 +11,9 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_SUBLAYER_FLAG_PERSISTENT, FWPM_SUBLAYER0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
 };
 
-use crate::GUID;
 use crate::transaction::Transaction;
 use crate::util::string_to_null_terminated_utf16;
+use crate::{GUID, Guid};
 
 /// Builder for creating Windows Filtering Platform sublayers.
 ///
@@ -151,8 +151,8 @@ impl<Name> SubLayerBuilder<Name> {
     /// This sets the `subLayerKey` field in the underlying [`FWPM_SUBLAYER0`] structure.
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
-    pub fn guid(mut self, guid: GUID) -> SubLayerBuilder<Name> {
-        self.sublayer.subLayerKey = guid;
+    pub fn guid(mut self, guid: impl Into<Guid>) -> SubLayerBuilder<Name> {
+        self.sublayer.subLayerKey = guid.into().into();
         self
     }
 
@@ -161,8 +161,8 @@ impl<Name> SubLayerBuilder<Name> {
     /// This sets the `providerKey` field in the underlying [`FWPM_SUBLAYER0`] structure.
     ///
     /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
-    pub fn provider(mut self, guid: GUID) -> SubLayerBuilder<Name> {
-        let key = Arc::new(guid);
+    pub fn provider(mut self, guid: impl Into<Guid>) -> SubLayerBuilder<Name> {
+        let key = Arc::new(GUID::from(guid.into()));
         // SAFETY: The data is never mutated; the Arc keeps the GUID alive as long as `self` lives.
         self.sublayer.providerKey = Arc::as_ptr(&key) as *mut _;
         self.provider_key = Some(key);
@@ -227,9 +227,10 @@ impl SubLayerBuilder<SubLayerBuilderHasName> {
 ///
 /// [`FWPM_SUBLAYER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_sublayer0
 /// [`FwpmSubLayerDeleteByKey0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmsublayerdeletebykey0
-pub fn delete_sublayer<'a>(transaction: &Transaction<'a>, guid: &GUID) -> io::Result<()> {
+pub fn delete_sublayer<'a>(transaction: &Transaction<'a>, guid: impl Into<Guid>) -> io::Result<()> {
+    let guid = GUID::from(guid.into());
     // SAFETY: The handle and GUID are valid
-    let status = unsafe { FwpmSubLayerDeleteByKey0(transaction.engine.as_raw_handle(), guid) };
+    let status = unsafe { FwpmSubLayerDeleteByKey0(transaction.engine.as_raw_handle(), &guid) };
     if status != ERROR_SUCCESS {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
