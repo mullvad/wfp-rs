@@ -10,8 +10,9 @@ use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_PROVIDER_FLAG_PERSISTENT, FWPM_PROVIDER0, FwpmProviderAdd0, FwpmProviderDeleteByKey0,
 };
+use windows_sys::core::GUID;
 
-use crate::GUID;
+use crate::Guid;
 use crate::transaction::Transaction;
 use crate::util::string_to_null_terminated_utf16;
 
@@ -29,11 +30,11 @@ use crate::util::string_to_null_terminated_utf16;
 /// # Example
 ///
 /// ```no_run
-/// use wfp::{GUID, ProviderBuilder, Transaction};
+/// use wfp::{Guid, ProviderBuilder, Transaction};
 /// use std::io;
 ///
 /// fn create_provider(transaction: &Transaction) -> io::Result<()> {
-///     let provider_guid = GUID::from_u128(0x11111111_2222_3333_4444_555555555555);
+///     let provider_guid = Guid::from_u128(0x11111111_2222_3333_4444_555555555555);
 ///     ProviderBuilder::default()
 ///         .name("My Provider")
 ///         .description("Groups filters owned by my application")
@@ -134,8 +135,8 @@ impl<Name> ProviderBuilder<Name> {
     /// structure.
     ///
     /// [`FWPM_PROVIDER0`]: https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_provider0
-    pub fn guid(mut self, guid: GUID) -> ProviderBuilder<Name> {
-        self.provider.providerKey = guid;
+    pub fn guid(mut self, guid: impl Into<Guid>) -> ProviderBuilder<Name> {
+        self.provider.providerKey = guid.into().into();
         self
     }
 
@@ -212,9 +213,10 @@ impl ProviderBuilder<ProviderBuilderHasName> {
 ///
 /// [`FWPM_PROVIDER0`]: https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_provider0
 /// [`FwpmProviderDeleteByKey0`]: https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmproviderdeletebykey0
-pub fn delete_provider<'a>(transaction: &Transaction<'a>, guid: &GUID) -> io::Result<()> {
+pub fn delete_provider<'a>(transaction: &Transaction<'a>, guid: impl Into<Guid>) -> io::Result<()> {
+    let guid = GUID::from(guid.into());
     // SAFETY: The handle and GUID are valid
-    let status = unsafe { FwpmProviderDeleteByKey0(transaction.engine.as_raw_handle(), guid) };
+    let status = unsafe { FwpmProviderDeleteByKey0(transaction.engine.as_raw_handle(), &guid) };
     if status != ERROR_SUCCESS {
         return Err(io::Error::from_raw_os_error(status as i32));
     }

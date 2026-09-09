@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## [Unreleased]
+### Changed
+- Replace `windows-sys`' `GUID` with an equivalent type that implements `PartialEq` and `Eq`.
+- **Breaking**: `FilterEnumItem::guid`, `FilterEnumItem::provider`, `SubLayerEnumItem::guid`,
+  `SubLayerEnumItem::provider`, `Layer::guid` and `ConditionField::guid` return `Guid` instead of
+  `GUID`. The last two return it by value rather than by reference.
 
 
 ## [0.2.0] - 2026-08-07

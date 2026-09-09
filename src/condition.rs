@@ -17,8 +17,9 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_CONDITION_IP_LOCAL_PORT, FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_ADDRESS,
     FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
 };
+use windows_sys::core::GUID;
 
-use crate::GUID;
+use crate::Guid;
 use crate::blob::{OwnedByteBlob, app_id_from_filename};
 use crate::util::string_to_null_terminated_utf16;
 
@@ -618,18 +619,19 @@ pub enum ConditionField {
 
 impl ConditionField {
     /// Returns the Windows GUID identifier for this condition field.
-    pub fn guid(&self) -> &GUID {
-        match self {
-            Self::RemoteAddress => &FWPM_CONDITION_IP_REMOTE_ADDRESS,
-            Self::LocalAddress => &FWPM_CONDITION_IP_LOCAL_ADDRESS,
-            Self::RemotePort => &FWPM_CONDITION_IP_REMOTE_PORT,
-            Self::LocalPort => &FWPM_CONDITION_IP_LOCAL_PORT,
-            Self::Protocol => &FWPM_CONDITION_IP_PROTOCOL,
-            Self::IcmpType => &FWPM_CONDITION_ICMP_TYPE,
-            Self::IcmpCode => &FWPM_CONDITION_ICMP_CODE,
-            Self::AppId => &FWPM_CONDITION_ALE_APP_ID,
-            Self::LocalInterface => &FWPM_CONDITION_IP_LOCAL_INTERFACE,
-        }
+    pub const fn guid(&self) -> Guid {
+        let guid = match self {
+            Self::RemoteAddress => FWPM_CONDITION_IP_REMOTE_ADDRESS,
+            Self::LocalAddress => FWPM_CONDITION_IP_LOCAL_ADDRESS,
+            Self::RemotePort => FWPM_CONDITION_IP_REMOTE_PORT,
+            Self::LocalPort => FWPM_CONDITION_IP_LOCAL_PORT,
+            Self::Protocol => FWPM_CONDITION_IP_PROTOCOL,
+            Self::IcmpType => FWPM_CONDITION_ICMP_TYPE,
+            Self::IcmpCode => FWPM_CONDITION_ICMP_CODE,
+            Self::AppId => FWPM_CONDITION_ALE_APP_ID,
+            Self::LocalInterface => FWPM_CONDITION_IP_LOCAL_INTERFACE,
+        };
+        Guid::from_raw(guid)
     }
 }
 
@@ -772,7 +774,7 @@ impl ConditionBuilder {
         // SAFETY: This is a C struct
         let mut raw_condition: FWPM_FILTER_CONDITION0 = unsafe { std::mem::zeroed() };
 
-        raw_condition.fieldKey = *field.guid();
+        raw_condition.fieldKey = field.guid().into();
         raw_condition.matchType = match_type as i32;
 
         match &*value {
@@ -852,21 +854,14 @@ mod test {
 
     use super::*;
 
-    fn assert_field_key_eq(actual: &GUID, expected: &GUID) {
-        assert_eq!(actual.data1, expected.data1);
-        assert_eq!(actual.data2, expected.data2);
-        assert_eq!(actual.data3, expected.data3);
-        assert_eq!(actual.data4, expected.data4);
-    }
-
     #[test]
     fn test_condition_local_interface_luid() {
         let luid: u64 = 0xDEAD_BEEF_1234_5678;
         let condition = InterfaceConditionBuilder::local().luid(luid).build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_LOCAL_INTERFACE,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_LOCAL_INTERFACE),
         );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
@@ -897,9 +892,9 @@ mod test {
     fn test_condition_port_remote() {
         let condition = PortConditionBuilder::remote().equal(80).build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_REMOTE_PORT,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_REMOTE_PORT),
         );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
@@ -913,7 +908,10 @@ mod test {
     fn test_icmp_type_condition_equal() {
         let condition = IcmpConditionBuilder::r#type().equal(135).build();
 
-        assert_field_key_eq(&condition.raw_condition.fieldKey, &FWPM_CONDITION_ICMP_TYPE);
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_ICMP_TYPE),
+        );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
         assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT16);
@@ -927,7 +925,10 @@ mod test {
     fn test_icmp_code_condition_equal() {
         let condition = IcmpConditionBuilder::code().equal(0).build();
 
-        assert_field_key_eq(&condition.raw_condition.fieldKey, &FWPM_CONDITION_ICMP_CODE);
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_ICMP_CODE),
+        );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
         assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT16);
@@ -941,9 +942,9 @@ mod test {
     fn test_icmpv6_protocol_condition() {
         let condition = ProtocolConditionBuilder::icmpv6().build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_PROTOCOL,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_PROTOCOL),
         );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
@@ -975,9 +976,9 @@ mod test {
             .subnet_v4(Ipv4Addr::new(192, 168, 0, 0), 16)
             .build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_REMOTE_ADDRESS,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_REMOTE_ADDRESS),
         );
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
         assert_eq!(
@@ -996,9 +997,9 @@ mod test {
             .subnet_v4(Ipv4Addr::new(127, 0, 0, 0), 8)
             .build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_LOCAL_ADDRESS,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_LOCAL_ADDRESS),
         );
         let v4 = unsafe { &*condition.raw_condition.conditionValue.Anonymous.v4AddrMask };
         assert_eq!(v4.addr, 0x7F000000);
@@ -1011,9 +1012,9 @@ mod test {
             .subnet_v6(Ipv6Addr::from_str("fe80::").unwrap(), 10)
             .build();
 
-        assert_field_key_eq(
-            &condition.raw_condition.fieldKey,
-            &FWPM_CONDITION_IP_REMOTE_ADDRESS,
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_REMOTE_ADDRESS),
         );
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
         assert_eq!(

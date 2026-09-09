@@ -11,14 +11,6 @@ use wfp::*;
 // same-weight sublayers by bumping the weight reported for one of them, which would otherwise
 // make `sublayer.weight()` assertions intermittently fail depending on scheduling.
 
-/// `GUID` does not implement `PartialEq`.
-fn guid_eq(left: &GUID, right: &GUID) -> bool {
-    left.data1 == right.data1
-        && left.data2 == right.data2
-        && left.data3 == right.data3
-        && left.data4 == right.data4
-}
-
 #[test]
 #[cfg_attr(not(feature = "wfp-integration-tests"), ignore)]
 fn test_add_filters_and_sublayer() {
@@ -30,7 +22,7 @@ fn test_add_filters_and_sublayer() {
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
     // Create a test sublayer
-    let test_guid = GUID::from_u128(0x12345678_1234_5678_9abc_def012345678);
+    let test_guid = Guid::from_u128(0x12345678_1234_5678_9abc_def012345678);
 
     SubLayerBuilder::default()
         .name("Test Sublayer")
@@ -83,8 +75,8 @@ fn test_enumerate_sublayers() {
         .open()
         .expect("Should be able to open filter engine");
 
-    let test_provider_guid = GUID::from_u128(0x0e0e0e0e_1111_2222_3333_444455556666);
-    let test_guid = GUID::from_u128(0x0e0e0e0e_1234_5678_9abc_def012345678);
+    let test_provider_guid = Guid::from_u128(0x0e0e0e0e_1111_2222_3333_444455556666);
+    let test_guid = Guid::from_u128(0x0e0e0e0e_1234_5678_9abc_def012345678);
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
@@ -117,7 +109,7 @@ fn test_enumerate_sublayers() {
 
     while let Some(sublayer) = sublayer_enum.next() {
         let sublayer = sublayer.expect("Should be able to read sublayer");
-        if !guid_eq(&sublayer.guid(), &test_guid) {
+        if sublayer.guid() != test_guid {
             continue;
         }
 
@@ -132,10 +124,9 @@ fn test_enumerate_sublayers() {
             ))
         );
         assert_eq!(sublayer.weight(), 101);
-        assert!(
-            sublayer
-                .provider()
-                .is_some_and(|guid| guid_eq(&guid, &test_provider_guid)),
+        assert_eq!(
+            sublayer.provider(),
+            Some(test_provider_guid),
             "The sublayer should be attached to the test provider"
         );
         assert!(
@@ -162,8 +153,8 @@ fn test_enumerate_filters() {
         .open()
         .expect("Should be able to open filter engine");
 
-    let test_provider_guid = GUID::from_u128(0x0f0f0f0f_1111_2222_3333_444455556666);
-    let test_sublayer_guid = GUID::from_u128(0x0f0f0f0f_1234_5678_9abc_def012345678);
+    let test_provider_guid = Guid::from_u128(0x0f0f0f0f_1111_2222_3333_444455556666);
+    let test_sublayer_guid = Guid::from_u128(0x0f0f0f0f_1234_5678_9abc_def012345678);
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
@@ -216,10 +207,7 @@ fn test_enumerate_filters() {
         let filter = filter.expect("Should be able to read filter");
 
         // Filters added by other providers are expected; only look at our own
-        if !filter
-            .provider()
-            .is_some_and(|guid| guid_eq(&guid, &test_provider_guid))
-        {
+        if filter.provider() != Some(test_provider_guid) {
             continue;
         }
 
@@ -257,9 +245,9 @@ fn test_add_provider_and_attach_filters() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_provider_guid = GUID::from_u128(0xdeadbeef_1111_2222_3333_444455556666);
-    let test_sublayer_guid = GUID::from_u128(0xdeadbeef_aaaa_bbbb_cccc_ddddeeeeffff);
-    let test_filter_guid = GUID::from_u128(0xdeadbeef_1234_5678_9abc_def012345678);
+    let test_provider_guid = Guid::from_u128(0xdeadbeef_1111_2222_3333_444455556666);
+    let test_sublayer_guid = Guid::from_u128(0xdeadbeef_aaaa_bbbb_cccc_ddddeeeeffff);
+    let test_filter_guid = Guid::from_u128(0xdeadbeef_1234_5678_9abc_def012345678);
 
     ProviderBuilder::default()
         .name("Test Provider")
@@ -303,7 +291,7 @@ fn test_app_id_condition() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = GUID::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
+    let test_guid = Guid::from_u128(0xaabbccdd_1234_5678_9abc_def012345678);
 
     SubLayerBuilder::default()
         .name("Test AppId Sublayer")
@@ -351,7 +339,7 @@ fn test_ndp_filter() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = GUID::from_u128(0xfeed1234_5678_9abc_def0_123456789abc);
+    let test_guid = Guid::from_u128(0xfeed1234_5678_9abc_def0_123456789abc);
 
     SubLayerBuilder::default()
         .name("Test NDP Sublayer")
@@ -413,7 +401,7 @@ fn test_local_interface_condition() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = GUID::from_u128(0xbbccddee_2345_6789_abcd_ef0123456789);
+    let test_guid = Guid::from_u128(0xbbccddee_2345_6789_abcd_ef0123456789);
 
     SubLayerBuilder::default()
         .name("Test Interface Sublayer")
@@ -460,7 +448,7 @@ fn test_ip_address_subnet_condition() {
 
     let transaction = Transaction::new(&mut engine).expect("Should be able to create transaction");
 
-    let test_guid = GUID::from_u128(0xbbccddee_1234_5678_9abc_def012345678);
+    let test_guid = Guid::from_u128(0xbbccddee_1234_5678_9abc_def012345678);
 
     SubLayerBuilder::default()
         .name("Test IP Address Sublayer")
@@ -501,4 +489,43 @@ fn test_ip_address_subnet_condition() {
     transaction
         .commit()
         .expect("Should be able to commit IP-address filter transaction");
+}
+
+/// The GUID-taking methods accept a raw `GUID`, as they did before `Guid` was introduced, as well
+/// as a `Guid`. This test only has to compile.
+// Callers written against the old `&GUID` signatures keep compiling, even though clippy would tell
+// them to drop the `&`.
+#[expect(clippy::needless_borrows_for_generic_args)]
+#[test]
+fn test_raw_guid_accepted() {
+    use windows_sys::core::GUID;
+
+    const RAW: GUID = GUID::from_u128(0xcafef00d_1234_5678_9abc_def012345678);
+    const FROM_U128: Guid = Guid::from_u128(0xcafef00d_1234_5678_9abc_def012345678);
+    const FROM_FIELDS: Guid = Guid {
+        data1: 0xcafef00d,
+        data2: 0x1234,
+        data3: 0x5678,
+        data4: [0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78],
+    };
+    const CONNECT_V4: Guid = Layer::ConnectV4.guid();
+    const LOCAL_PORT: Guid = ConditionField::LocalPort.guid();
+
+    assert_eq!(FROM_U128, FROM_FIELDS);
+    assert_eq!(FROM_U128, Guid::from(RAW));
+    assert_ne!(CONNECT_V4, LOCAL_PORT);
+
+    let _ = FilterBuilder::default()
+        .name("Raw GUID filter")
+        .action(ActionType::Block)
+        .layer(Layer::ConnectV4)
+        .guid(RAW)
+        .sublayer(&RAW)
+        .provider(RAW);
+    let _ = SubLayerBuilder::default()
+        .name("Raw GUID sublayer")
+        .guid(RAW);
+    let _ = ProviderBuilder::default()
+        .name("Raw GUID provider")
+        .guid(&RAW);
 }

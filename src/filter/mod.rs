@@ -17,8 +17,9 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWPM_FILTER_FLAG_PERSISTENT, FWPM_FILTER0, FwpmFilterAdd0, FwpmFilterDeleteById0,
     FwpmFilterDeleteByKey0,
 };
+use windows_sys::core::GUID;
 
-use crate::GUID;
+use crate::Guid;
 use crate::action::ActionType;
 use crate::condition::Condition;
 use crate::layer::Layer;
@@ -177,8 +178,8 @@ impl<Name, Action> FilterBuilder<Name, Action> {
     /// This sets the `filterKey` field in the underlying [`FWPM_FILTER0`] structure.
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
-    pub fn guid(mut self, guid: GUID) -> FilterBuilder<Name, Action> {
-        self.filter.filterKey = guid;
+    pub fn guid(mut self, guid: impl Into<Guid>) -> FilterBuilder<Name, Action> {
+        self.filter.filterKey = guid.into().into();
         self
     }
 
@@ -188,7 +189,7 @@ impl<Name, Action> FilterBuilder<Name, Action> {
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
     pub fn layer(mut self, layer: Layer) -> FilterBuilder<Name, Action> {
-        self.filter.layerKey = *layer.guid();
+        self.filter.layerKey = layer.guid().into();
         self
     }
 
@@ -199,8 +200,8 @@ impl<Name, Action> FilterBuilder<Name, Action> {
     /// This sets the `subLayerKey` field in the underlying [`FWPM_FILTER0`] structure.
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
-    pub fn sublayer(mut self, sublayer: GUID) -> FilterBuilder<Name, Action> {
-        self.filter.subLayerKey = sublayer;
+    pub fn sublayer(mut self, sublayer: impl Into<Guid>) -> FilterBuilder<Name, Action> {
+        self.filter.subLayerKey = sublayer.into().into();
         self
     }
 
@@ -209,8 +210,8 @@ impl<Name, Action> FilterBuilder<Name, Action> {
     /// This sets the `providerKey` field in the underlying [`FWPM_FILTER0`] structure.
     ///
     /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
-    pub fn provider(mut self, guid: GUID) -> FilterBuilder<Name, Action> {
-        let key = Arc::new(guid);
+    pub fn provider(mut self, guid: impl Into<Guid>) -> FilterBuilder<Name, Action> {
+        let key = Arc::new(GUID::from(guid.into()));
         // SAFETY: The data is never mutated; the Arc keeps the GUID alive as long as `self` lives.
         self.filter.providerKey = Arc::as_ptr(&key) as *mut _;
         self.provider_key = Some(key);
@@ -393,9 +394,13 @@ pub fn delete_filter<'a>(transaction: &Transaction<'a>, id: u64) -> io::Result<(
 /// The GUID corresponds to the `filterKey` field in the underlying [`FWPM_FILTER0`] structure.
 ///
 /// [`FWPM_FILTER0`]: https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
-pub fn delete_filter_by_guid<'a>(transaction: &Transaction<'a>, guid: &GUID) -> io::Result<()> {
+pub fn delete_filter_by_guid<'a>(
+    transaction: &Transaction<'a>,
+    guid: impl Into<Guid>,
+) -> io::Result<()> {
+    let guid = GUID::from(guid.into());
     // SAFETY: The handle and GUID are valid
-    let status = unsafe { FwpmFilterDeleteByKey0(transaction.engine.as_raw_handle(), guid) };
+    let status = unsafe { FwpmFilterDeleteByKey0(transaction.engine.as_raw_handle(), &guid) };
     if status != STATUS_SUCCESS as u32 {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
