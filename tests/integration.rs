@@ -433,6 +433,20 @@ fn test_local_interface_condition() {
         .add(&transaction)
         .expect("Should be able to add interface filter");
 
+    let not_iface_condition = InterfaceConditionBuilder::local()
+        .not_alias("Loopback Pseudo-Interface 1")
+        .expect("Should be able to resolve loopback interface alias to a LUID");
+
+    FilterBuilder::default()
+        .name("Non-Loopback Permit Filter")
+        .description("Permits traffic not bound to the loopback interface")
+        .action(ActionType::Permit)
+        .layer(Layer::ConnectV4)
+        .condition(not_iface_condition.build())
+        .sublayer(test_guid)
+        .add(&transaction)
+        .expect("Should be able to add negated interface filter");
+
     transaction
         .commit()
         .expect("Should be able to commit interface filter transaction");
