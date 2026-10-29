@@ -12,11 +12,12 @@ use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FWP_BYTE_ARRAY16, FWP_BYTE_ARRAY16_TYPE, FWP_BYTE_BLOB_TYPE, FWP_CONDITION_FLAG_IS_LOOPBACK,
     FWP_MATCH_EQUAL, FWP_MATCH_FLAGS_ALL_SET, FWP_MATCH_FLAGS_ANY_SET, FWP_MATCH_FLAGS_NONE_SET,
     FWP_MATCH_GREATER, FWP_MATCH_GREATER_OR_EQUAL, FWP_MATCH_LESS, FWP_MATCH_LESS_OR_EQUAL,
-    FWP_MATCH_RANGE, FWP_UINT8, FWP_UINT16, FWP_UINT32, FWP_UINT64, FWP_UNICODE_STRING_TYPE,
-    FWP_V4_ADDR_AND_MASK, FWP_V4_ADDR_MASK, FWP_V6_ADDR_AND_MASK, FWP_V6_ADDR_MASK,
-    FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_FLAGS, FWPM_CONDITION_IP_LOCAL_ADDRESS,
-    FWPM_CONDITION_IP_LOCAL_INTERFACE, FWPM_CONDITION_IP_LOCAL_PORT, FWPM_CONDITION_IP_PROTOCOL,
-    FWPM_CONDITION_IP_REMOTE_ADDRESS, FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
+    FWP_MATCH_NOT_EQUAL, FWP_MATCH_RANGE, FWP_UINT8, FWP_UINT16, FWP_UINT32, FWP_UINT64,
+    FWP_UNICODE_STRING_TYPE, FWP_V4_ADDR_AND_MASK, FWP_V4_ADDR_MASK, FWP_V6_ADDR_AND_MASK,
+    FWP_V6_ADDR_MASK, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_FLAGS,
+    FWPM_CONDITION_IP_LOCAL_ADDRESS, FWPM_CONDITION_IP_LOCAL_INTERFACE,
+    FWPM_CONDITION_IP_LOCAL_PORT, FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_ADDRESS,
+    FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
 };
 use windows_sys::core::GUID;
 
@@ -398,25 +399,37 @@ impl<Value> InterfaceConditionBuilder<Value> {
         self,
         alias: impl AsRef<OsStr>,
     ) -> io::Result<InterfaceConditionBuilder<InterfaceConditionBuilderHasValue>> {
-        let wide_alias: Vec<u16> = string_to_null_terminated_utf16(alias);
-        let mut luid = NET_LUID_LH::default();
+        Ok(self.luid(interface_alias_to_luid(alias)?))
+    }
 
-        // SAFETY: Passing a null-terminated UTF-16 string and a valid pointer to NET_LUID_LH.
-        let status = unsafe { ConvertInterfaceAliasToLuid(wide_alias.as_ptr(), &mut luid) };
-        if status != ERROR_SUCCESS {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-
-        // SAFETY: NET_LUID_LH is a union of `Value: u64` and `Info` (also 8 bytes), so reading
-        // `Value` is always valid regardless of how the OS populated the union.
-        let luid_value = unsafe { luid.Value };
-        Ok(self.luid(luid_value))
+    /// Creates a condition that matches any interface except the one with the given alias.
+    ///
+    /// The alias is resolved to a LUID using [`ConvertInterfaceAliasToLuid`].
+    /// Returns `Err` if the interface does not exist.
+    ///
+    /// [`ConvertInterfaceAliasToLuid`]: https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-convertinterfacealiastoluid
+    pub fn not_alias(
+        self,
+        alias: impl AsRef<OsStr>,
+    ) -> io::Result<InterfaceConditionBuilder<InterfaceConditionBuilderHasValue>> {
+        Ok(self.not_luid(interface_alias_to_luid(alias)?))
     }
 
     /// Creates a condition that matches the given raw interface LUID.
     pub fn luid(self, luid: u64) -> InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
         InterfaceConditionBuilder {
             builder: self.builder.match_type(MatchType::Equal).value_u64(luid),
+            _pd: std::marker::PhantomData,
+        }
+    }
+
+    /// Creates a condition that matches any interface except the given raw interface LUID.
+    pub fn not_luid(
+        self,
+        luid: u64,
+    ) -> InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
+        InterfaceConditionBuilder {
+            builder: self.builder.match_type(MatchType::NotEqual).value_u64(luid),
             _pd: std::marker::PhantomData,
         }
     }
@@ -430,6 +443,22 @@ impl InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
     pub fn build(self) -> Condition {
         self.builder.build().expect("condition should be valid")
     }
+}
+
+/// Resolve an interface alias to its LUID using `ConvertInterfaceAliasToLuid`.
+fn interface_alias_to_luid(alias: impl AsRef<OsStr>) -> io::Result<u64> {
+    let wide_alias: Vec<u16> = string_to_null_terminated_utf16(alias);
+    let mut luid = NET_LUID_LH::default();
+
+    // SAFETY: Passing a null-terminated UTF-16 string and a valid pointer to NET_LUID_LH.
+    let status = unsafe { ConvertInterfaceAliasToLuid(wide_alias.as_ptr(), &mut luid) };
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+
+    // SAFETY: NET_LUID_LH is a union of `Value: u64` and `Info` (also 8 bytes), so reading
+    // `Value` is always valid regardless of how the OS populated the union.
+    Ok(unsafe { luid.Value })
 }
 
 /// Typed builder for loopback-traffic conditions.
@@ -667,6 +696,8 @@ pub enum MatchType {
     FlagsAnySet = FWP_MATCH_FLAGS_ANY_SET,
     /// None of the bits in the condition value may be set in the data.
     FlagsNoneSet = FWP_MATCH_FLAGS_NONE_SET,
+    /// The network data must differ from the condition value.
+    NotEqual = FWP_MATCH_NOT_EQUAL,
 }
 
 /// Represents different types of filter conditions that can be applied to network traffic.
@@ -967,6 +998,26 @@ mod test {
         );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
+        assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT64);
+
+        // SAFETY: For FWP_UINT64 the `uint64` field is a pointer to the backing u64,
+        // kept alive by the Arc inside `Condition`.
+        let ptr = unsafe { condition.raw_condition.conditionValue.Anonymous.uint64 };
+        assert!(!ptr.is_null());
+        assert_eq!(unsafe { *ptr }, luid);
+    }
+
+    #[test]
+    fn test_condition_local_interface_not_luid() {
+        let luid: u64 = 0xDEAD_BEEF_1234_5678;
+        let condition = InterfaceConditionBuilder::local().not_luid(luid).build();
+
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_LOCAL_INTERFACE),
+        );
+
+        assert_eq!(condition.raw_condition.matchType, FWP_MATCH_NOT_EQUAL);
         assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT64);
 
         // SAFETY: For FWP_UINT64 the `uint64` field is a pointer to the backing u64,
