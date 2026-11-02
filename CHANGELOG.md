@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## [Unreleased]
+
+
+## [0.3.0] - 2026-11-02
 ### Added
 - Add `LoopbackConditionBuilder`, for matching on traffic that WFP classifies as loopback, together
   with `ConditionField::Flags` and the `MatchType` variants `FlagsAllSet`, `FlagsAnySet` and
