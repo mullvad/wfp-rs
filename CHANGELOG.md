@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 
 ## [Unreleased]
+### Added
+- Add `LoopbackConditionBuilder`, for matching on traffic that WFP classifies as loopback, together
+  with `ConditionField::Flags` and the `MatchType` variants `FlagsAllSet`, `FlagsAnySet` and
+  `FlagsNoneSet`.
+- Add `IpAddressConditionBuilder::host_v4` and `IpAddressConditionBuilder::host_v6`, for matching on
+  a single IP address.
+- Add `InterfaceConditionBuilder::not_alias` and `InterfaceConditionBuilder::not_luid`, for matching
+  on any interface except the given one, together with `MatchType::NotEqual`.
+
 ### Changed
 - Replace `windows-sys`' `GUID` with an equivalent type that implements `PartialEq` and `Eq`.
 - **Breaking**: `FilterEnumItem::guid`, `FilterEnumItem::provider`, `SubLayerEnumItem::guid`,

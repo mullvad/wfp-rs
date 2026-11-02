@@ -9,10 +9,12 @@ use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::NetworkManagement::IpHelper::ConvertInterfaceAliasToLuid;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
-    FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_MATCH_GREATER, FWP_MATCH_GREATER_OR_EQUAL,
-    FWP_MATCH_LESS, FWP_MATCH_LESS_OR_EQUAL, FWP_MATCH_RANGE, FWP_UINT8, FWP_UINT16, FWP_UINT32,
-    FWP_UINT64, FWP_UNICODE_STRING_TYPE, FWP_V4_ADDR_AND_MASK, FWP_V4_ADDR_MASK,
-    FWP_V6_ADDR_AND_MASK, FWP_V6_ADDR_MASK, FWPM_CONDITION_ALE_APP_ID,
+    FWP_BYTE_ARRAY16, FWP_BYTE_ARRAY16_TYPE, FWP_BYTE_BLOB_TYPE, FWP_CONDITION_FLAG_IS_LOOPBACK,
+    FWP_MATCH_EQUAL, FWP_MATCH_FLAGS_ALL_SET, FWP_MATCH_FLAGS_ANY_SET, FWP_MATCH_FLAGS_NONE_SET,
+    FWP_MATCH_GREATER, FWP_MATCH_GREATER_OR_EQUAL, FWP_MATCH_LESS, FWP_MATCH_LESS_OR_EQUAL,
+    FWP_MATCH_NOT_EQUAL, FWP_MATCH_RANGE, FWP_UINT8, FWP_UINT16, FWP_UINT32, FWP_UINT64,
+    FWP_UNICODE_STRING_TYPE, FWP_V4_ADDR_AND_MASK, FWP_V4_ADDR_MASK, FWP_V6_ADDR_AND_MASK,
+    FWP_V6_ADDR_MASK, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_FLAGS,
     FWPM_CONDITION_IP_LOCAL_ADDRESS, FWPM_CONDITION_IP_LOCAL_INTERFACE,
     FWPM_CONDITION_IP_LOCAL_PORT, FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_ADDRESS,
     FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER_CONDITION0,
@@ -397,25 +399,37 @@ impl<Value> InterfaceConditionBuilder<Value> {
         self,
         alias: impl AsRef<OsStr>,
     ) -> io::Result<InterfaceConditionBuilder<InterfaceConditionBuilderHasValue>> {
-        let wide_alias: Vec<u16> = string_to_null_terminated_utf16(alias);
-        let mut luid = NET_LUID_LH::default();
+        Ok(self.luid(interface_alias_to_luid(alias)?))
+    }
 
-        // SAFETY: Passing a null-terminated UTF-16 string and a valid pointer to NET_LUID_LH.
-        let status = unsafe { ConvertInterfaceAliasToLuid(wide_alias.as_ptr(), &mut luid) };
-        if status != ERROR_SUCCESS {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-
-        // SAFETY: NET_LUID_LH is a union of `Value: u64` and `Info` (also 8 bytes), so reading
-        // `Value` is always valid regardless of how the OS populated the union.
-        let luid_value = unsafe { luid.Value };
-        Ok(self.luid(luid_value))
+    /// Creates a condition that matches any interface except the one with the given alias.
+    ///
+    /// The alias is resolved to a LUID using [`ConvertInterfaceAliasToLuid`].
+    /// Returns `Err` if the interface does not exist.
+    ///
+    /// [`ConvertInterfaceAliasToLuid`]: https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-convertinterfacealiastoluid
+    pub fn not_alias(
+        self,
+        alias: impl AsRef<OsStr>,
+    ) -> io::Result<InterfaceConditionBuilder<InterfaceConditionBuilderHasValue>> {
+        Ok(self.not_luid(interface_alias_to_luid(alias)?))
     }
 
     /// Creates a condition that matches the given raw interface LUID.
     pub fn luid(self, luid: u64) -> InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
         InterfaceConditionBuilder {
             builder: self.builder.match_type(MatchType::Equal).value_u64(luid),
+            _pd: std::marker::PhantomData,
+        }
+    }
+
+    /// Creates a condition that matches any interface except the given raw interface LUID.
+    pub fn not_luid(
+        self,
+        luid: u64,
+    ) -> InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
+        InterfaceConditionBuilder {
+            builder: self.builder.match_type(MatchType::NotEqual).value_u64(luid),
             _pd: std::marker::PhantomData,
         }
     }
@@ -428,6 +442,64 @@ impl InterfaceConditionBuilder<InterfaceConditionBuilderHasValue> {
     /// `alias()` or `luid()`.
     pub fn build(self) -> Condition {
         self.builder.build().expect("condition should be valid")
+    }
+}
+
+/// Resolve an interface alias to its LUID using `ConvertInterfaceAliasToLuid`.
+fn interface_alias_to_luid(alias: impl AsRef<OsStr>) -> io::Result<u64> {
+    let wide_alias: Vec<u16> = string_to_null_terminated_utf16(alias);
+    let mut luid = NET_LUID_LH::default();
+
+    // SAFETY: Passing a null-terminated UTF-16 string and a valid pointer to NET_LUID_LH.
+    let status = unsafe { ConvertInterfaceAliasToLuid(wide_alias.as_ptr(), &mut luid) };
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+
+    // SAFETY: NET_LUID_LH is a union of `Value: u64` and `Info` (also 8 bytes), so reading
+    // `Value` is always valid regardless of how the OS populated the union.
+    Ok(unsafe { luid.Value })
+}
+
+/// Builder for loopback-traffic conditions.
+///
+/// Matches traffic that WFP classifies as loopback, i.e. where the
+/// [`FWP_CONDITION_FLAG_IS_LOOPBACK`] bit of `FWPM_CONDITION_FLAGS` is set.
+///
+/// # Example
+///
+/// ```no_run
+/// use wfp::LoopbackConditionBuilder;
+///
+/// let condition = LoopbackConditionBuilder::new().build();
+/// ```
+///
+/// [`FWP_CONDITION_FLAG_IS_LOOPBACK`]: https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmgetappidfromfilename0
+#[derive(Clone)]
+pub struct LoopbackConditionBuilder {
+    builder: ConditionBuilder,
+}
+
+impl Default for LoopbackConditionBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LoopbackConditionBuilder {
+    /// Creates a condition that matches loopback traffic.
+    pub fn new() -> Self {
+        Self {
+            builder: ConditionBuilder::default()
+                .field(ConditionField::Flags)
+                .match_type(MatchType::FlagsAllSet)
+                .value_u32(FWP_CONDITION_FLAG_IS_LOOPBACK),
+        }
+    }
+
+    /// Builds the condition.
+    pub fn build(self) -> Condition {
+        self.builder.build().expect("all values are set")
     }
 }
 
@@ -544,13 +616,45 @@ impl<V> IpAddressConditionBuilder<V> {
             _pd: std::marker::PhantomData,
         }
     }
+
+    /// Match a single IPv4 host address.
+    ///
+    /// The address is stored as a raw `FWP_UINT32`.
+    pub fn host_v4(
+        self,
+        addr: Ipv4Addr,
+    ) -> IpAddressConditionBuilder<IpAddressConditionBuilderHasValue> {
+        IpAddressConditionBuilder {
+            builder: self
+                .builder
+                .match_type(MatchType::Equal)
+                .value_u32(u32::from(addr)),
+            _pd: std::marker::PhantomData,
+        }
+    }
+
+    /// Match a single IPv6 host address.
+    ///
+    /// The address is stored as a raw 16-byte array (`FWP_BYTE_ARRAY16`).
+    pub fn host_v6(
+        self,
+        addr: Ipv6Addr,
+    ) -> IpAddressConditionBuilder<IpAddressConditionBuilderHasValue> {
+        IpAddressConditionBuilder {
+            builder: self
+                .builder
+                .match_type(MatchType::Equal)
+                .value_byte_array16(addr.octets()),
+            _pd: std::marker::PhantomData,
+        }
+    }
 }
 
 impl IpAddressConditionBuilder<IpAddressConditionBuilderHasValue> {
     /// Builds the condition.
     ///
-    /// This method is only available once a subnet has been set with
-    /// [`subnet_v4`](Self::subnet_v4) or [`subnet_v6`](Self::subnet_v6).
+    /// This method is only available once an address or subnet has been set
+    /// with the other methods.
     pub fn build(self) -> Condition {
         self.builder.build().expect("condition should be valid")
     }
@@ -586,6 +690,14 @@ pub enum MatchType {
     LessOrEqual = FWP_MATCH_LESS_OR_EQUAL,
     /// The network data must fall within a specified range.
     Range = FWP_MATCH_RANGE,
+    /// All of the bits in the condition value must be set in the data.
+    FlagsAllSet = FWP_MATCH_FLAGS_ALL_SET,
+    /// At least one of the bits in the condition value must be set in the data.
+    FlagsAnySet = FWP_MATCH_FLAGS_ANY_SET,
+    /// None of the bits in the condition value may be set in the data.
+    FlagsNoneSet = FWP_MATCH_FLAGS_NONE_SET,
+    /// The network data must differ from the condition value.
+    NotEqual = FWP_MATCH_NOT_EQUAL,
 }
 
 /// Represents different types of filter conditions that can be applied to network traffic.
@@ -615,6 +727,8 @@ pub enum ConditionField {
     AppId,
     /// Local interface LUID for the connection.
     LocalInterface,
+    /// Condition flags, e.g. whether the traffic is loopback.
+    Flags,
 }
 
 impl ConditionField {
@@ -630,6 +744,7 @@ impl ConditionField {
             Self::IcmpCode => FWPM_CONDITION_ICMP_CODE,
             Self::AppId => FWPM_CONDITION_ALE_APP_ID,
             Self::LocalInterface => FWPM_CONDITION_IP_LOCAL_INTERFACE,
+            Self::Flags => FWPM_CONDITION_FLAGS,
         };
         Guid::from_raw(guid)
     }
@@ -671,6 +786,7 @@ enum ConditionValue {
     UInt8(u8),
     String(Vec<u16>),
     ByteBlob { blob: OwnedByteBlob },
+    ByteArray16([u8; 16]),
     V4AddrMask(FWP_V4_ADDR_AND_MASK),
     V6AddrMask(FWP_V6_ADDR_AND_MASK),
 }
@@ -741,6 +857,15 @@ impl ConditionBuilder {
         self
     }
 
+    /// Sets a 16-byte array value for the condition.
+    ///
+    /// This is used for IPv6 addresses matched exactly, as an alternative to
+    /// [`ConditionBuilder::value_v6_addr_mask`].
+    pub fn value_byte_array16(mut self, value: [u8; 16]) -> Self {
+        self.value = Some(ConditionValue::ByteArray16(value).into());
+        self
+    }
+
     /// Sets an IPv4 address-and-mask value for the condition.
     ///
     /// `addr` and `mask` are in host byte order, matching the in-memory layout
@@ -806,6 +931,14 @@ impl ConditionBuilder {
                 // SAFETY: The data is never mutated, and is tied to the lifetime of Condition
                 raw_condition.conditionValue.Anonymous.byteBlob = blob.as_ptr() as _;
             }
+            ConditionValue::ByteArray16(bytes) => {
+                raw_condition.conditionValue.r#type = FWP_BYTE_ARRAY16_TYPE;
+                // SAFETY: The data is never mutated, and is tied to the lifetime of Condition
+                // (the Arc<ConditionValue> in `_value` keeps the variant payload alive at a
+                // stable address).
+                raw_condition.conditionValue.Anonymous.byteArray16 =
+                    &raw const *bytes as *mut FWP_BYTE_ARRAY16;
+            }
             ConditionValue::V4AddrMask(addr_and_mask) => {
                 raw_condition.conditionValue.r#type = FWP_V4_ADDR_MASK;
                 // SAFETY: The data is never mutated, and is tied to the lifetime of Condition
@@ -865,6 +998,26 @@ mod test {
         );
 
         assert_eq!(condition.raw_condition.matchType, FWP_MATCH_EQUAL);
+        assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT64);
+
+        // SAFETY: For FWP_UINT64 the `uint64` field is a pointer to the backing u64,
+        // kept alive by the Arc inside `Condition`.
+        let ptr = unsafe { condition.raw_condition.conditionValue.Anonymous.uint64 };
+        assert!(!ptr.is_null());
+        assert_eq!(unsafe { *ptr }, luid);
+    }
+
+    #[test]
+    fn test_condition_local_interface_not_luid() {
+        let luid: u64 = 0xDEAD_BEEF_1234_5678;
+        let condition = InterfaceConditionBuilder::local().not_luid(luid).build();
+
+        assert_eq!(
+            Guid::from(condition.raw_condition.fieldKey),
+            Guid::from(FWPM_CONDITION_IP_LOCAL_INTERFACE),
+        );
+
+        assert_eq!(condition.raw_condition.matchType, FWP_MATCH_NOT_EQUAL);
         assert_eq!(condition.raw_condition.conditionValue.r#type, FWP_UINT64);
 
         // SAFETY: For FWP_UINT64 the `uint64` field is a pointer to the backing u64,
